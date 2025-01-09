@@ -4,6 +4,7 @@ import { getPendingPost, updatePostStatus } from '../../db/post';
 import { uploadToGallery } from '../../utils/upload/upload';
 import type { WeiboData } from '../types';
 import { saveMedias } from '../../db/media';
+import { downloadVideo } from '../../utils/downloadVideo';
 
 interface MediaInfo {
     width: number | null;
@@ -17,7 +18,7 @@ function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
     const medias: MediaInfo[] = [];
 
     if (data.status && data.status.pics) {
-        data.status.pics.forEach((pic) => {
+        data.status.pics.forEach(async (pic) => {
             if (pic.type === "video" && pic.videoSrc) {
                 medias.push({
                     width: pic.geo?.width || null,
@@ -110,33 +111,41 @@ export const getWeiboPost = async (id: string) => {
     }
 };
 
-export const weiboPostConsumer = async () => {
+export const runWeiboPostConsumer = async () => {
     const post = await getPendingPost();
     if (!post) {
         return;
     }
     // 获取微博帖子数据
     const data = await getWeiboPost(post.platformId);
+    // const data = await getWeiboPost('5120079876328548');
     if (!data) {
         return;
     }
     const { medias } = data;
-    if (!medias.length) {
-        await updatePostStatus(post.id, UploadStatus.UPLOADED);
-        return;
-    }
+  
     // 保存图片到gallery
     const mediaUrls = medias.map(media => media.originMediaUrl);
-    const results = await uploadToGallery(mediaUrls);
-    await saveMedias(results.map((url, index) => ({
-        galleryMediaUrl: url,
-        originMediaUrl: medias[index].originMediaUrl,
-        postId: post.id,
-        originSrc: medias[index].originSrc,
-        userId: post.userId,
-        width: medias[index].width,
-        height: medias[index].height,
-    })));
+    for(const mediaUrl of mediaUrls){
+        const result = await uploadToGallery(mediaUrl,{
+            Host: 'wx3.sinaimg.cn',
+            Referer: 'https://weibo.com/'
+        });
+        console.log(result)
+    }
+
+    // await saveMedias(results.map((url, index) => ({
+    //     galleryMediaUrl: url,
+    //     originMediaUrl: medias[index].originMediaUrl,
+    //     postId: post.id,
+    //     originSrc: medias[index].originSrc,
+    //     userId: post.userId,
+    //     width: medias[index].width,
+    //     height: medias[index].height,
+    // })));
     // 更新post状态
-    await updatePostStatus(post.id, UploadStatus.UPLOADED);
+    // if (!medias.length) {
+    //     await updatePostStatus(post.id, UploadStatus.UPLOADED);
+    //     return;
+    // }
 };

@@ -1,143 +1,151 @@
 import axios from 'axios';
 import sharp from 'sharp';
-import path from 'path';
+import { log } from '../log';
+import { Readable } from 'stream';
 
-// 配置常量
-const Gallery_URL = 'https://telegraph-image-bww.pages.dev';
-const SUPPORTED_TYPES = {
-    images: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-    videos: ['mov', 'mp4']
+const GALLERY_URL = 'https://gallery233.pages.dev';
+const SUPPORTED_EXTENSIONS = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'mov': 'video/quicktime',
+    'mp4': 'video/mp4'
 } as const;
 
-// 工具函数
-const getFileExtension = (url: string): string => {
-    try {
-        const urlPath = new URL(url).pathname;
-        return path.extname(urlPath).toLowerCase().slice(1) || '';
-    } catch {
-        const match = url.match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/);
-        return match ? match[1].toLowerCase() : '';
-    }
-};
+type SupportedExtension = keyof typeof SUPPORTED_EXTENSIONS;
 
-const getMimeType = (extension: string): string => {
-    const mimeTypes: Record<string, string> = {
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'png': 'image/png',
-        'gif': 'image/gif',
-        'webp': 'image/webp',
-        'mov': 'video/quicktime',
-        'mp4': 'video/mp4'
-    };
-    return mimeTypes[extension] || 'application/octet-stream';
-};
-const isImageFile = (extension: string): boolean => 
-    SUPPORTED_TYPES.images.includes(extension as typeof SUPPORTED_TYPES.images[number]);
-
-const isVideoFile = (extension: string): boolean => 
-    SUPPORTED_TYPES.videos.includes(extension as typeof SUPPORTED_TYPES.videos[number]);
-
-// 类型定义
-interface TransferResult {
+interface UploadResult {
     url: string;
     originalSize: number;
     compressedSize: number;
 }
 
-// 下载函数
-const downloadFile = async (url: string): Promise<Uint8Array|null> => {
+const getFileExtension = (url: string): string => {
     try {
-        const response = await axios({
-            url,
-            responseType: 'arraybuffer',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Host': new URL(url).hostname
-            },
-            timeout: 30000 // 30秒超时
-        });
-        return new Uint8Array(response.data);
-    } catch (error) {
-        console.error(`❌ 文件下载失败: ${url}`, error instanceof Error ? error.message : 'Unknown error');
-        return null;
+        return new URL(url).pathname.split('.').pop()?.toLowerCase() || '';
+    } catch {
+        return url.split('.').pop()?.split(/[?#]/)[0]?.toLowerCase() || '';
     }
 };
 
-// 上传媒体文件
-export async function transferMedia(url: string): Promise<TransferResult | null> {
+const getFileName = (url: string): string => {
     try {
-        const fileBuffer = await downloadFile(url);
-        if (!fileBuffer) {
-            throw new Error('Download failed');
-        }
+        const pathname = new URL(url).pathname;
+        return pathname.split('/').pop() || `file.${getFileExtension(url)}`;
+    } catch {
+        return url.split('/').pop()?.split(/[?#]/)[0] || `file.${getFileExtension(url)}`;
+    }
+};
 
+const isImage = (ext: string): ext is SupportedExtension => 
+    ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+
+const isVideo = (ext: string): ext is SupportedExtension => 
+    ['mov', 'mp4'].includes(ext);
+
+const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+};
+
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+    return new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        stream.on('error', (error) => reject(error));
+    });
+}
+
+export async function uploadToGallery(
+    url: string, 
+    headers: Record<string, string> = {}
+): Promise<string | null> {
+    try {
         const extension = getFileExtension(url);
-        const originalSize = fileBuffer.length;
+        let uploadBuffer: Buffer;
         
-        let uploadBuffer: Buffer | Uint8Array = fileBuffer;
-        let mimeType = getMimeType(extension);
-        let fileName = `file.${extension || 'bin'}`;
-
-        // 图片转换为webp
-        if (isImageFile(extension)) {
-            try {
-                uploadBuffer = await sharp(fileBuffer)
-                    .webp({ quality: 90 })
-                    .toBuffer();
-                mimeType = 'image/webp';
-                fileName = 'file.webp';
-            } catch (error) {
-                console.error(`WebP conversion failed for ${url}:`, error);
-                // 如果转换失败，使用原始buffer
-            }
+        if (!isImage(extension) && !isVideo(extension)) {
+            log(`不支持的文件类型: ${url}`, 'warn');
+            return null;
         }
 
-        const compressedSize = uploadBuffer.length;
-        const formData = new FormData();
-        const blob = new Blob([uploadBuffer], { type: mimeType });
-        formData.append('file', blob, fileName);
+        if(isVideo(extension)){
+            try{
+            log(`开始下载视频: ${url}`, 'info');
+            const response = await axios({
+                method: 'GET',
+                url,
+                responseType: 'stream',
+                headers: {
+                    'Host': new URL(url).hostname,
+                    ...headers,
+                },
+                timeout: 30000,
+            });
+            uploadBuffer = await streamToBuffer(response.data);
+        } catch (error) {
+            log(`下载视频失败: ${url}, ${error}`, 'error');
+            return null;
+        }
+        } else {
+            try{
+            const response = await axios({
+                url,
+                responseType: 'arraybuffer',
+                headers: {
+                    'host': new URL(url).hostname,
+                    ...headers
+                },
+            });
+            uploadBuffer = Buffer.from(response.data);
+        }catch(error){
+            log(`下载图片失败: ${url}, ${error}`, 'error');
+            return null;
+        }
+        }
 
-        const response = await fetch(`${Gallery_URL}/upload`, {
-            method: 'POST',
-            body: formData
+        const originalSize = uploadBuffer.length;
+        let mimeType = SUPPORTED_EXTENSIONS[extension as SupportedExtension] || 'application/octet-stream';
+        let fileName = getFileName(url);
+
+        // webp上传会失败
+        // if (isImage(extension)) {
+        //     try {
+        //         uploadBuffer = await sharp(uploadBuffer).webp({ quality: 90 }).toBuffer();
+        //         mimeType = 'image/webp';
+        //         fileName = fileName.replace(/\.[^.]+$/, '.webp');
+        //     } catch (error) {
+        //         log(`WebP转换失败: ${url}, ${error}`, 'error');
+        //     }
+        // }
+
+        const formData = new FormData();
+        formData.append('file', new Blob([uploadBuffer], { type: mimeType }), fileName);
+
+        const uploadResponse = await axios.post(`${GALLERY_URL}/upload`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
         });
 
-        if (!response.ok) {
-            throw new Error(`Upload failed with status: ${response.status}`);
+        if (uploadResponse.status !== 200) {
+            throw new Error(`上传失败，状态码: ${uploadResponse.status}`);
         }
+
+        const data = uploadResponse.data;
+        if (!data[0]?.src) throw new Error('上传响应缺少文件URL');
         
-        const data = await response.json();
-        if (!data[0]?.src) {
-            throw new Error('Upload response missing file URL');
-        }
-        return {
-            url: `${Gallery_URL}${data[0].src}`,
-            originalSize,
-            compressedSize
-        };
+        const compressedSize = uploadBuffer.length;
+        const compressionRatio = ((compressedSize / originalSize) * 100).toFixed(2);
+        log(`上传成功: ${url} (原始: ${formatFileSize(originalSize)} → 压缩: ${formatFileSize(compressedSize)}, 压缩后: ${compressionRatio}%)`, 'success');
+        
+        return `${GALLERY_URL}${data[0].src}`;
     } catch (error) {
-        console.error(`Transfer failed for ${url}:`, error);
+        log(`上传失败: ${url}, ${error}`, 'error');
         return null;
     }
 }
-
-// 批量上传函数
-export const uploadToGallery = async (urls: string[]): Promise<string[]> => {
-    const results: string[] = [];
-    
-    for (const url of urls) {
-        const extension = getFileExtension(url);
-        if (!isImageFile(extension) && !isVideoFile(extension)) {
-            console.warn(`Skipping unsupported file type: ${url}`);
-            continue;
-        }
-
-        const result = await transferMedia(url);
-        if (result) {
-            results.push(result.url);
-        }
-    }
-    
-    return results;
-};
