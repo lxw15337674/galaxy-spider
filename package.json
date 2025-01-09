@@ -2,10 +2,18 @@
   "name": "gallery-spider",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "produce": "bun run ./spider/produce.ts",
+    "consume": "bun run ./spider/consume.ts",
+    "weiboTopic": "bun run ./spider/producers/weiboTopic/index.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "playwright": "^1.49.1"
   }
 }

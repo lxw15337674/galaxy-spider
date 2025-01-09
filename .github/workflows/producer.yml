@@ -1,0 +1,27 @@
+name: Weibo Producer
+
+on:
+  schedule:
+    - cron: '30 */12 * * *'  # 错开生产者30分钟后运行
+  workflow_dispatch:
+
+jobs:
+  produce-weibo:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Run Producer
+        run: bun run produce 
