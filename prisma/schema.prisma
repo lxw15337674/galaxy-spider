@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TrackMeta {
+  id         String      @id @default(uuid())
+  name       String
+  type       String
+  remark     String      @default("")
+  createTime DateTime    @default(now())
+  updateTime DateTime    @default(now())
+  deletedAt  DateTime?
+  countItems TrackItem[]
+}
+
+model TrackItem {
+  id          String     @id @default(uuid())
+  remark      String
+  createTime  DateTime   @default(now())
+  updateTime  DateTime   @default(now())
+  countMetaId String?
+  deletedAt   DateTime?
+  countMeta   TrackMeta? @relation(fields: [countMetaId], references: [id])
+}
+
+enum Priority {
+  IMPORTANT_URGENT       // 重要且紧急
+  IMPORTANT_NOT_URGENT   // 重要不紧急
+  URGENT_NOT_IMPORTANT   // 紧急不重要
+  NOT_IMPORTANT_NOT_URGENT // 不重要不紧急
+}
+
+model Task {
+  id         String    @id @default(uuid())
+  name       String
+  remark     String
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now())
+  deletedAt  DateTime?
+  status     String
+  priority   Priority?  @default(NOT_IMPORTANT_NOT_URGENT)
+  tags       TaskTag[] @relation("TaskToTaskTag")
+}
+
+model Bookmark {
+  id         String        @id @default(uuid())
+  url        String        @unique
+  remark     String?
+  createTime DateTime      @default(now())
+  updateTime DateTime      @default(now())
+  deletedAt  DateTime?
+  image      String?
+  summary    String?
+  title      String?
+  loading    Boolean       @default(true)
+  tags       BookmarkTag[] @relation("BookmarkToBookmarkTag")
+}
+
+model BookmarkTag {
+  id         String     @id @default(uuid())
+  name       String
+  remark     String?
+  createTime DateTime   @default(now())
+  updateTime DateTime   @default(now())
+  deletedAt  DateTime?
+  bookmarks  Bookmark[] @relation("BookmarkToBookmarkTag")
+}
+
+model Anniversary {
+  id         String    @id @default(uuid())
+  name       String
+  remark     String
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now())
+  deletedAt  DateTime?
+  date       DateTime
+}
+
+
+model Media {
+  id              Int       @id @default(autoincrement())
+  width           Int?
+  height          Int?
+  postId          String?
+  originSrc       String?
+  userId          String?
+  createTime      DateTime? @default(now())
+  deletedAt       DateTime?
+  updateTime      DateTime  @default(now())
+  galleryMediaUrl String?
+  originMediaUrl  String?
+  status         UploadStatus @default(PENDING)
+
+  @@index([userId])
+  @@index([createTime])
+  @@index([postId])
+}
+
+enum UploadStatus {
+  PENDING   // 待上传
+  UPLOADED  // 已上传
+  FAILED    // 上传失败
+}
+
+model Producer {
+  id            String    @id @default(cuid())
+  weiboIds      String[] @default([])
+  xiaohongshuIds String[] @default([])
+  douyinIds     String[] @default([])
+  weiboChaohua  String?
+  createTime    DateTime  @default(now())
+  updateTime    DateTime  @default(now())
+  deletedAt     DateTime?
+  name          String?
+  weiboTopicIds String[] @default([])
+  @@map("producer")
+}
+
+
+model TaskTag {
+  id         String    @id @default(uuid())
+  name       String    @unique
+  remark     String?
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now())
+  deletedAt  DateTime?
+  tasks      Task[]    @relation("TaskToTaskTag")
+}
+
+model Post {
+  id         String    @id @default(uuid())
+  producerId String    // 生产者ID
+  userId     String    // 发布者ID
+  platform   Platform  // 平台
+  platformId String    // 平台上的原始ID
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now())
+  deletedAt  DateTime?
+  status     UploadStatus @default(PENDING) 
+
+  @@unique([platform, platformId])
+  @@index([userId])
+  @@index([createTime])
+}
+
+enum Platform {
+  WEIBO
+  XIAOHONGSHU
+  DOUYIN
+}

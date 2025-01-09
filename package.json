@@ -3,17 +3,28 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "produce": "bun run ./spider/produce.ts",
-    "consume": "bun run ./spider/consume.ts",
-    "weiboTopic": "bun run ./spider/producers/weiboTopic/index.ts"
+    "migrate": "npx prisma db push && npx prisma generate",
+    "produce": "vite-node run ./spider/produce.ts",
+    "consume": "vite-node  run ./spider/consume.ts",
+    "weiboTopic": "vite-node run ./spider/producers/weiboTopic/index.ts",
+    "dev": "vite-node src/index.ts",
+    "start": "vite-node src/index.ts",
+    "test": "vitest --debug",
+    "test:watch": "vitest --watch"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "vite-node": "^2.1.8",
+    "@types/node": "^20.0.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "playwright": "^1.49.1"
+    "@prisma/client": "6.2.1",
+    "axios": "^1.7.9",
+    "playwright": "^1.42.1",
+    "prisma": "^6.2.1",
+    "vitest": "^2.1.8"
   }
 }

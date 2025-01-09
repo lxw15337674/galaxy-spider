@@ -1,8 +1,8 @@
 import { PrismaClient, UploadStatus } from '@prisma/client';
-import { Media } from '../upload/type';
-import { log } from '../../utils/log';
+import { Media } from '../utils/upload/type';
+import { log } from '../utils/log';
+import { prisma } from '.';
 
-const prisma = new PrismaClient();
 
 export const updateMediaGalleryUrl = async (id:number,galleryMediaUrl:string,status:UploadStatus) => {
     try {

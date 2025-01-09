@@ -1,11 +1,10 @@
-import axios, { AxiosError } from 'axios';
-import { Producer, UploadStatus } from '@prisma/client';
-import { Media } from '../../common/upload/type';
-import { sleep } from '../../common';
-import { WeiboMblog } from '../../types/weibo';
+import axios from 'axios';
+import type { Producer } from '@prisma/client';
+import { sleep } from '../../utils';
+import type { WeiboMblog } from '../../types/weibo';
 import { log } from '../../utils/log';
-import { saveMedias } from '../../common/db/media';
-import { PageResult, PicItem } from './types';
+import { createPost } from '../../db/post';
+import type { PageResult } from './types';
 
 // Constants
 const API_CONFIG = {
@@ -19,20 +18,6 @@ const API_CONFIG = {
 } as const;
 
 
-// Utility functions
-const handleError = (error: unknown, context: string): never => {
-    const msg = error instanceof AxiosError ? error.message : '未知错误';
-    log(`${context}: ${msg}`, 'error');
-    throw error;
-};
-
-const convertPicsToArray = (pics: any): PicItem[] => {
-    if (Array.isArray(pics)) return pics;
-    return Object.entries(pics)
-        .filter(([key]) => key !== '')
-        .map(([_, value]) => value as PicItem)
-        .filter(item => item.large?.url || item.videoSrc);
-};
 
 // API functions
 const getContainerId = async (userId: string): Promise<string|null> => {
@@ -42,7 +27,7 @@ const getContainerId = async (userId: string): Promise<string|null> => {
         log(`获取到用户containerId: ${containerId}`, 'info');
         return containerId;
     } catch (error) {
-        handleError(error, '获取用户信息失败');
+        log( '获取用户信息失败');
         return null
     }
 };
@@ -70,35 +55,29 @@ const fetchPage = async (userId: string, containerId: string, sinceId?: string):
 
 const processPost = async (post: WeiboMblog, userId: string): Promise<number> => {
     const pics = post?.pics || [];
-    const originSrc = `https://weibo.com/${userId}/${post.bid}`;
-
+    
     if (!pics || (typeof pics === 'object' && Object.keys(pics).length === 0)) {
-        log(`没有图片，跳过,源链接: ${originSrc}`, 'warn');
         return 0;
     }
 
-    const picsArray = convertPicsToArray(pics);
-    if (picsArray.length === 0) {
-        log('没有有效的图片，跳过', 'warn');
+    try {
+        await createPost({
+            id: post.id,
+            platform: 'WEIBO',
+            userId,
+            platformId: post.id,
+        });
+        
+        const picsCount = Array.isArray(pics) ? pics.length : Object.keys(pics).length;
+        log(`已保存帖子 ${post.id}，包含 ${picsCount} 张图片`);
+        return picsCount;
+    } catch (error) {
+        log(`保存帖子失败: ${error}`, 'error');
         return 0;
     }
-
-    const medias: Media[] = picsArray.map((pic, i) => ({
-        userId,
-        postId: post.id,
-        originMediaUrl: pic.videoSrc || pic.large.url,
-        createTime: new Date(post.created_at || Date.now()),
-        width: Number(pic.large.geo.width),
-        height: Number(pic.large.geo.height),
-        originSrc,
-        status: UploadStatus.PENDING
-    }));
-
-    await saveMedias(medias);
-    return medias.length;
 };
 
-const processUserPosts = async (userId: string): Promise<number> => {
+const processUserPosts = async (userId: string,maxPages:number): Promise<number> => {
     let totalProcessed = 0;
     let sinceId: string | undefined;
 
@@ -108,7 +87,7 @@ const processUserPosts = async (userId: string): Promise<number> => {
             log(`未找到用户 ${userId} 的containerId，跳过`, 'warn');
             return 0;
         }
-        for (let page = 0; page < API_CONFIG.maxPages; page++) {
+        for (let page = 0; page < maxPages; page++) {
             try {
                 const { cards, sinceId: newSinceId } = await fetchPage(userId, containerId, sinceId);
 
@@ -141,10 +120,10 @@ const processUserPosts = async (userId: string): Promise<number> => {
     return totalProcessed;
 };
 
-export const processWeibo = async (producers: Producer[]): Promise<void> => {
+export const processWeiboPerson = async (producers: Producer[],maxPages:number=API_CONFIG.maxPages): Promise<number> => {
     try {
         log('==== 开始微博数据获取 ====');
-        log(`总共有 ${producers.length} 个生产者需要处理`);
+        let totalCount = 0;
 
         for (const producer of producers) {
             if (producer.weiboIds.length === 0) {
@@ -158,7 +137,8 @@ export const processWeibo = async (producers: Producer[]): Promise<void> => {
             for (const userId of producer.weiboIds) {
                 try {
                     log(`\n🔄 开始处理用户 ${userId} 的微博`);
-                    const processedCount = await processUserPosts(userId);
+                    const processedCount = await processUserPosts(userId,maxPages);
+                    totalCount += processedCount;
                     log(`用户 ${userId} 处理完成，共处理 ${processedCount} 张图片`, 'success');
                 } catch (error) {
                     log(`用户 ${userId} 处理失败: ${error}`, 'error');
@@ -166,8 +146,10 @@ export const processWeibo = async (producers: Producer[]): Promise<void> => {
             }
         }
         
-        log('\n==== 微博数据获取完成 ====', 'success');
+        log(`\n==== 微博数据获取完成，共处理 ${totalCount} 张图片 ====`, 'success');
+        return totalCount;
     } catch (error) {
         log('微博处理主函数出错: ' + error, 'error');
+        return 0;
     }
 }; 

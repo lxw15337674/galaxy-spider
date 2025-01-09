@@ -1,5 +1,5 @@
-import { getUploadMedias, updateMediaGalleryUrl, getRemainingUploadCount } from '../db/media';
-import { log } from '../../utils/log';
+import { getUploadMedias, updateMediaGalleryUrl, getRemainingUploadCount } from '../../db/media';
+import { log } from '../log';
 import { transferImage } from './upload';
 import { sleep } from '..';
 import { UploadStatus } from '@prisma/client';

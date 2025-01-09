@@ -1,5 +1,5 @@
 import { getProducers } from './common/db/producer';
-import { processWeibo } from './producers/weiboperson1';
+import { processWeibo } from './producers/weiboperson';
 import { log } from './utils/log';
 
 async function main() {

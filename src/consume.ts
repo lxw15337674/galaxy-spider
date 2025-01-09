@@ -1,5 +1,5 @@
 import { log } from './utils/log';
-import uploadImageToGallery from './common/upload';
+import uploadImageToGallery from './utils/upload';
 
 async function main() {
     try {

@@ -1,65 +1,28 @@
-
-
 import axios from 'axios';
-import { Producer, UploadStatus } from '@prisma/client';
-import { Media } from '../../common/upload/type';
-import { sleep } from '../../common';
+import type { Producer } from '@prisma/client';
+import { sleep } from '../../utils';
 import { log } from '../../utils/log';
-
+import { createPost } from '../../db/post';
 
 //Constants
 const API_CONFIG = {
     baseUrl: 'https://m.weibo.cn/api/container/getIndex',
     headers: {
         "accept": "application/json, text/plain, */*",
-        "mweibo-pwa": "1"
     },
     delayMs: 10000,
     maxPages: 20
 } as const;
 
-
-
-const processPost = async (post: Card['mblog'], topicId: string): Promise<number> => {
-    const medias: Media[] = [];
-    const originSrc = `https://weibo.com/detail/${post.id}`;
-    if (post.pics && post.pics.length > 0) {
-        post.pics.forEach((pic) => {
-            if (pic.large?.url) {
-            //     medias.push({
-            //         userId: topicId,
-            //         postId: post.id,
-            //         originMediaUrl: pic.large.url,
-            //         createTime: new Date(post.created_at),
-            //         width: parseInt(pic.large.geo.width),
-            //         height: parseInt(pic.large.geo.height),
-            //         originSrc,
-            //         status: UploadStatus.PENDING
-                    medias.push({
-                        userId: topicId,
-                        postId: post.id,
-                        originMediaUrl: pic.large.url,
-                        createTime: new Date(post.created_at),
-                        width: parseInt(pic.large.geo.width),
-                        height: parseInt(pic.large.geo.height),
-                        originSrc,
-                        status: UploadStatus.PENDING
-                    });
-                }
-            });
-        }
-
-        if (medias.length > 0) {
-            await saveMedias(medias);
-        return medias.length;
-    }
-
-    return 0;
-};
-
-export const processWeiboTopic = async (producers: Producer[]): Promise<void> => {
+export const processWeiboTopic = async (producers: Producer[],maxPages:number=API_CONFIG.maxPages): Promise<number> => {
     try {
-        log('==== 开始微博话题数据获取 ====');
+        log('==== 开始获取微博话题帖子 ====');
+        let totalCount = 0;
+        
+        // 计算总任务数
+        const totalTopics = producers.reduce((sum, producer) => 
+            sum + (producer.weiboTopicIds?.length || 0), 0);
+        let completedTopics = 0;
 
         for (const producer of producers) {
             if (!producer.weiboTopicIds?.length) {
@@ -72,8 +35,10 @@ export const processWeiboTopic = async (producers: Producer[]): Promise<void> =>
             for (const topicId of producer.weiboTopicIds) {
                 let totalProcessed = 0;
                 let sinceId: string | undefined;
-
-                for (let page = 0; page < API_CONFIG.maxPages; page++) {
+                
+                log(`开始处理话题 ${topicId} (${++completedTopics}/${totalTopics})`);
+                
+                for (let page = 0; page < maxPages; page++) {
                     try {
                         const response = await axios.get<any>(API_CONFIG.baseUrl, {
                             params: {
@@ -92,15 +57,25 @@ export const processWeiboTopic = async (producers: Producer[]): Promise<void> =>
 
                         if (!validCards.length) continue;
 
+                        log(`正在处理第 ${page + 1} 页，共找到 ${validCards.length} 条帖子`);
+
                         for (const card of validCards) {
                             try {
-                                const count = await processPost(card.mblog, topicId);
-                                if (count > 0) {
-                                    totalProcessed += count;
-                                    log(`处理微博 ${card.mblog.id} 成功，获取到 ${count} 个媒体文件`);
+                                const post = card.mblog;
+                                if (post.pics?.length) {
+                                    await createPost({
+                                        id: post.id,
+                                        platform: 'WEIBO',
+                                        userId: producer.id,
+                                        platformId: post.id,
+                                    });
+                                    
+                                    totalProcessed += post.pics.length;
+                                    totalCount += post.pics.length;
+                                    log(`已保存帖子 ${post.id}，包含 ${post.pics.length} 张图片`);
                                 }
                             } catch (error) {
-                                log(`处理微博失败: ${error}`, 'error');
+                                log(`保存帖子失败: ${error}`, 'error');
                             }
                         }
 
@@ -112,29 +87,15 @@ export const processWeiboTopic = async (producers: Producer[]): Promise<void> =>
                     }
                 }
 
-                log(`话题 ${topicId} 处理完成，共处理 ${totalProcessed} 个媒体文件`, 'success');
+                const remainingTopics = totalTopics - completedTopics;
+                log(`话题 ${topicId} 处理完成，共保存 ${totalProcessed} 张有图片的帖子 (还剩 ${remainingTopics} 个话题)`, 'success');
             }
         }
 
-        log('\n==== 微博话题数据获取完成 ====', 'success');
+        log(`\n==== 微博话题帖子获取完成，共处理 ${totalCount} 张图片 ====`, 'success');
+        return totalCount;
     } catch (error) {
         log('微博话题处理失败: ' + error, 'error');
+        return 0;
     }
 };
-
-
-const producer: Producer[] = [{
-    name: "测试话题",
-    id: "123456",
-    weiboTopicIds: ["100808fa2e191f05c4e748d06033886dad8048"],
-    weiboIds: [],
-    xiaohongshuIds: [],
-    douyinIds: [],
-    weiboChaohua: null,
-    createTime: new Date(),
-    updateTime: new Date(),
-    deletedAt: null
-}]
-
-processWeiboTopic(producer);
-

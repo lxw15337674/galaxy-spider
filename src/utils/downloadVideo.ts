@@ -2,7 +2,7 @@ import axios from "axios";
 import * as fs from 'fs';
 import path from "path";
 
-const downloadVideo = async (url: string, postId: string): Promise<void> => {
+export const downloadVideo = async (url: string, postId: string): Promise<void> => {
     const videosDir = path.join(process.cwd(), 'videos');
     if (!fs.existsSync(videosDir)) {
         fs.mkdirSync(videosDir, { recursive: true });
