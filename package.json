@@ -4,9 +4,7 @@
   "type": "module",
   "scripts": {
     "migrate": "npx prisma db push && npx prisma generate",
-    "produce": "vite-node run ./spider/produce.ts",
-    "consume": "vite-node  run ./spider/consume.ts",
-    "weiboTopic": "vite-node run ./spider/producers/weiboTopic/index.ts",
+    "weiboConsume": "vite-node ./src/consume.ts",
     "dev": "vite-node src/index.ts",
     "start": "vite-node src/index.ts",
     "test": "vitest --debug",
@@ -14,17 +12,16 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "vite-node": "^2.1.8",
-    "@types/node": "^20.0.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vite-node": "^2.1.8"
   },
   "dependencies": {
     "@prisma/client": "6.2.1",
     "axios": "^1.7.9",
     "playwright": "^1.42.1",
     "prisma": "^6.2.1",
+    "sharp": "^0.33.5",
     "vitest": "^2.1.8"
   }
 }

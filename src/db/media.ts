@@ -1,5 +1,4 @@
-import { PrismaClient, UploadStatus } from '@prisma/client';
-import { Media } from '../utils/upload/type';
+import { PrismaClient, UploadStatus, type Media } from '@prisma/client';
 import { log } from '../utils/log';
 import { prisma } from '.';
 
@@ -23,38 +22,39 @@ export const updateMediaGalleryUrl = async (id:number,galleryMediaUrl:string,sta
     }
 }
 
-export const saveMedias = async (data: Media[]):Promise<number> => {
+type MediaData = Omit<Media, 'id'|'status'|'createTime'|'updateTime'|'deletedAt'>
+export const saveMedias = async (data: MediaData[]):Promise<number> => {
     try {
         if (!data?.length) {
             log('没有需要保存的数据', 'warn');
             return 0
         }
 
+        const mediaUrls = data.map(img => img.originMediaUrl).filter((url): url is string => !!url);
         const existingUrls = await prisma.media.findMany({
             where: {
-                originSrc: {
-                    in: data.map((img: Media) => img.originSrc)
+                originMediaUrl: {
+                    in: mediaUrls
                 }
             },
-            select: { originSrc: true }
+            select: { originMediaUrl: true }
         });
 
-        const existingSet = new Set(existingUrls.map((img) => img.originSrc));
-        const newImages = data.filter((img: Media) => !existingSet.has(img.originSrc));
+        const existingSet = new Set(existingUrls.map(img => img.originMediaUrl));
+        const newImages = data.filter(img => img.originMediaUrl && !existingSet.has(img.originMediaUrl));
 
         if (!newImages.length) {
-            // log('所有图片都已存在', 'info');
             return 0
         }
 
         const result = await prisma.media.createMany({
-            data: newImages.map((img: Media) => ({
+            data: newImages.map(img => ({
                 ...img,
-                createTime: img.createTime || new Date(),
+                status: UploadStatus.UPLOADED
             }))
         });
         log(`保存成功 ${result.count} 张图片记录,跳过 ${existingUrls.length} 张`, 'success');
-        return  result.count
+        return result.count
     } catch (error) {
         log(`保存失败: ${error}`, 'error');
         return 0

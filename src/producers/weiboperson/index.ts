@@ -62,9 +62,8 @@ const processPost = async (post: WeiboMblog, userId: string): Promise<number> =>
 
     try {
         await createPost({
-            id: post.id,
+            userId: String(post.user.id),
             platform: 'WEIBO',
-            userId,
             platformId: post.id,
         });
         

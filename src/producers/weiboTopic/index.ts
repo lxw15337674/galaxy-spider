@@ -64,9 +64,8 @@ export const processWeiboTopic = async (producers: Producer[],maxPages:number=AP
                                 const post = card.mblog;
                                 if (post.pics?.length) {
                                     await createPost({
-                                        id: post.id,
                                         platform: 'WEIBO',
-                                        userId: producer.id,
+                                        userId: String(card.mblog.user.id),
                                         platformId: post.id,
                                     });
                                     

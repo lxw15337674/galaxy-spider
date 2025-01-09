@@ -2,13 +2,11 @@ import { Platform, UploadStatus, type Post } from '@prisma/client';
 import { prisma } from '.';
 
 export const createPost = async (data: {
-    id: string;
     platform: Platform;
     userId: string;
     platformId: string;
 }): Promise<Post> => {
     const postData = {
-        id: data.id,
         userId: data.userId,
         platform: data.platform,
         platformId: data.platformId,
@@ -37,3 +35,15 @@ export const updatePostStatus = async (id: string, status: UploadStatus) => {
         data: { status }
     });
 };
+// 获取pending的post
+export const getPendingPost = async () => {
+    return await prisma.post.findFirst({
+        where: { status: UploadStatus.PENDING }
+    });
+};
+export const countPendingPost = async () => {
+    return await prisma.post.count({
+        where: { status: UploadStatus.PENDING }
+    });
+};
+

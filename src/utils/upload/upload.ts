@@ -1,16 +1,27 @@
 import axios from 'axios';
-import { sleep } from '..';
 import sharp from 'sharp';
+import path from 'path';
 
-// 根据URL获取文件扩展名
+// 配置常量
+const Gallery_URL = 'https://telegraph-image-bww.pages.dev';
+const SUPPORTED_TYPES = {
+    images: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    videos: ['mov', 'mp4']
+} as const;
+
+// 工具函数
 const getFileExtension = (url: string): string => {
-    const match = url.match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/);
-    return match ? match[1].toLowerCase() : '';
+    try {
+        const urlPath = new URL(url).pathname;
+        return path.extname(urlPath).toLowerCase().slice(1) || '';
+    } catch {
+        const match = url.match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/);
+        return match ? match[1].toLowerCase() : '';
+    }
 };
 
-// 根据扩展名获取MIME类型
 const getMimeType = (extension: string): string => {
-    const mimeTypes: { [key: string]: string } = {
+    const mimeTypes: Record<string, string> = {
         'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
         'png': 'image/png',
@@ -19,88 +30,70 @@ const getMimeType = (extension: string): string => {
         'mov': 'video/quicktime',
         'mp4': 'video/mp4'
     };
-    return mimeTypes[extension] || 'image/jpeg';
+    return mimeTypes[extension] || 'application/octet-stream';
 };
-// 下载图片并返回数据
-export const downloadImage = async (url: string): Promise<Uint8Array|null> => {
-    try {
-        const response = await axios({
-            url,
-           responseType: 'arraybuffer',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Host': 'weibo.com'
-            }
-        });
-        return new Uint8Array(response.data);
-    } catch (error) {
-        console.error(`❌ 图片下载失败: ${url}`);
-        return null
-    }
-};
+const isImageFile = (extension: string): boolean => 
+    SUPPORTED_TYPES.images.includes(extension as typeof SUPPORTED_TYPES.images[number]);
 
-// 带重试机制的请求
-const retryRequest = async <T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> => {
-    let lastError: Error | null = null; // 初始化 lastError 为 null
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            return await fn(); // 尝试执行函数
-        } catch (error) {
-            lastError = error as Error; // 捕获错误
-            if (i < maxRetries - 1) {
-                await sleep(1000 * Math.pow(2, i)); // 指数退避重试
-                continue;
-            }
-        }
-    }
-    throw lastError; // 重试次数用尽后抛出错误
-};
+const isVideoFile = (extension: string): boolean => 
+    SUPPORTED_TYPES.videos.includes(extension as typeof SUPPORTED_TYPES.videos[number]);
 
-
-const Gallery_URL = 'https://telegraph-image-bww.pages.dev';
-
-// 判断是否为图片类型
-const isImageFile = (extension: string): boolean => {
-    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    return imageExtensions.includes(extension.toLowerCase());
-};
-
+// 类型定义
 interface TransferResult {
     url: string;
     originalSize: number;
     compressedSize: number;
 }
 
-export async function transferImage(url: string): Promise<TransferResult | null> {
-    return retryRequest(async () => {
-        // 下载图片
-        const imageBuffer = await downloadImage(url);
-        const extension = getFileExtension(url);
-        if (!imageBuffer) {
-            throw new Error('Download image failed');
-        }
-        const originalSize = imageBuffer.length;
-        
-        
-        let uploadBuffer: Buffer | Uint8Array = imageBuffer;
-        let mimeType = getMimeType(extension);
-        let fileName = `file.${extension || 'jpg'}`;
+// 下载函数
+const downloadFile = async (url: string): Promise<Uint8Array|null> => {
+    try {
+        const response = await axios({
+            url,
+            responseType: 'arraybuffer',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Host': new URL(url).hostname
+            },
+            timeout: 30000 // 30秒超时
+        });
+        return new Uint8Array(response.data);
+    } catch (error) {
+        console.error(`❌ 文件下载失败: ${url}`, error instanceof Error ? error.message : 'Unknown error');
+        return null;
+    }
+};
 
-        // 只对图片类型进行webp转换和压缩
+// 上传媒体文件
+export async function transferMedia(url: string): Promise<TransferResult | null> {
+    try {
+        const fileBuffer = await downloadFile(url);
+        if (!fileBuffer) {
+            throw new Error('Download failed');
+        }
+
+        const extension = getFileExtension(url);
+        const originalSize = fileBuffer.length;
+        
+        let uploadBuffer: Buffer | Uint8Array = fileBuffer;
+        let mimeType = getMimeType(extension);
+        let fileName = `file.${extension || 'bin'}`;
+
+        // 图片转换为webp
         if (isImageFile(extension)) {
-            const image = sharp(imageBuffer);
-            uploadBuffer = await image
-                .webp({
-                    quality: 90,
-                })
-                .toBuffer();
-            mimeType = 'image/webp';
-            fileName = 'file.webp';
+            try {
+                uploadBuffer = await sharp(fileBuffer)
+                    .webp({ quality: 90 })
+                    .toBuffer();
+                mimeType = 'image/webp';
+                fileName = 'file.webp';
+            } catch (error) {
+                console.error(`WebP conversion failed for ${url}:`, error);
+                // 如果转换失败，使用原始buffer
+            }
         }
 
         const compressedSize = uploadBuffer.length;
-
-        // 上传到图床
         const formData = new FormData();
         const blob = new Blob([uploadBuffer], { type: mimeType });
         formData.append('file', blob, fileName);
@@ -116,19 +109,35 @@ export async function transferImage(url: string): Promise<TransferResult | null>
         
         const data = await response.json();
         if (!data[0]?.src) {
-            throw new Error('Upload response missing image URL');
+            throw new Error('Upload response missing file URL');
         }
-
-        const galleryUrl = `${Gallery_URL}${data[0].src}`;
-        
         return {
-            url: galleryUrl,
+            url: `${Gallery_URL}${data[0].src}`,
             originalSize,
             compressedSize
         };
-    }, 3).catch(error => {
-        console.error(`Transfer image failed:`, error);
+    } catch (error) {
+        console.error(`Transfer failed for ${url}:`, error);
         return null;
-    });
+    }
 }
 
+// 批量上传函数
+export const uploadToGallery = async (urls: string[]): Promise<string[]> => {
+    const results: string[] = [];
+    
+    for (const url of urls) {
+        const extension = getFileExtension(url);
+        if (!isImageFile(extension) && !isVideoFile(extension)) {
+            console.warn(`Skipping unsupported file type: ${url}`);
+            continue;
+        }
+
+        const result = await transferMedia(url);
+        if (result) {
+            results.push(result.url);
+        }
+    }
+    
+    return results;
+};

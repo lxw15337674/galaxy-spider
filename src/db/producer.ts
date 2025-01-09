@@ -1,7 +1,6 @@
 'use server';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+import { prisma } from ".";
 
 export const getProducers = async () => {
   return await prisma.producer.findMany({
