@@ -1,38 +1,32 @@
-name: Image Consumer
+name:  Image Consumer
 
 on:
   schedule:
-    - cron: '30 */12 * * *'  # Run 30 minutes after producer
-  workflow_dispatch:
+    - cron: '30 */12 * * *'  # 每12小时运行一次
+  workflow_dispatch:         # 支持手动触发
 
 jobs:
-  consume-images:
+  produce-images:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      
+    
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: '22'
 
-    - name: Install pnpm
+      - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 9.11.0
+          version: 8
 
       - name: Install Dependencies
         run: pnpm install
 
       - name: Run Consumer
         run: pnpm run consume
-        
-      - name: Handle Failure
-        if: failure()
-        run: |
-          echo "Consumer job failed at $(date)"
-          exit 1 

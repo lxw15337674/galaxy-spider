@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "migrate": "npx prisma db push && npx prisma generate",
-    "weiboConsume": "vite-node ./src/consume.ts",
+    "consume": "vite-node ./src/consume.ts",
+    "produce": "vite-node ./src/produce.ts",
     "dev": "vite-node src/index.ts",
     "start": "vite-node src/index.ts",
     "test": "vitest --debug",

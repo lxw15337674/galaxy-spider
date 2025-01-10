@@ -1,38 +1,32 @@
-name: Image Producer
+name: Weibo  Producer
 
 on:
   schedule:
-    - cron: '0 */12 * * *'  # Run every 12 hours
-  workflow_dispatch:
+    - cron: '0 */12 * * *'  # 每12小时运行一次
+  workflow_dispatch:         # 支持手动触发
 
 jobs:
-  produce-images:
+  produce-weibo:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      
+    
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: '22'
 
-      - name: Install pnpm
+      - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 9.11.0
+          version: 8
 
       - name: Install Dependencies
         run: pnpm install
 
       - name: Run Producer
-        run: pnpm run produce
-        
-      - name: Handle Failure
-        if: failure()
-        run: |
-          echo "Producer job failed at $(date)"
-          exit 1 
+        run: pnpm run produce  # 需要在 package.json 中添加这个命令 
