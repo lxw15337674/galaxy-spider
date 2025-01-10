@@ -2,7 +2,7 @@ name: Image Consumer
 
 on:
   schedule:
-    - cron: '30 */12 * * *'  # 错开生产者30分钟后运行
+    - cron: '30 */12 * * *'  # Run 30 minutes after producer
   workflow_dispatch:
 
 jobs:
@@ -10,18 +10,31 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    
+      
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
 
       - name: Install Dependencies
-        run: bun install
+        run: pnpm install
 
       - name: Run Consumer
-        run: bun run consume 
+        run: pnpm run consume
+        
+      - name: Handle Failure
+        if: failure()
+        run: |
+          echo "Consumer job failed at $(date)"
+          exit 1 
