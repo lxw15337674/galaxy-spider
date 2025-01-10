@@ -28,5 +28,8 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+
       - name: Run Consumer
         run: pnpm run consume
