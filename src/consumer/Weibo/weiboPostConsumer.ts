@@ -3,7 +3,7 @@ import { browserManager } from '../../browser';
 import { saveMedias } from '../../db/media';
 import { getPendingPost, updatePostStatus } from '../../db/post';
 import { uploadToGallery } from '../../utils/upload/upload';
-import type { WeiboData } from '../types';
+import type { WeiboData } from './types';
 import type { Page } from 'playwright';
 
 interface MediaInfo {
@@ -122,14 +122,16 @@ export const runWeiboPostConsumer = async () => {
                 // 保存图片到gallery
                 const mediaUrls = medias.map(media => media.originMediaUrl);
                 const results: string[] = [];
-                const uploadPromises = mediaUrls.map(mediaUrl => 
-                    uploadToGallery(mediaUrl, {
-                        Host: 'wx3.sinaimg.cn',
+                
+                // Sequential upload
+                for (const mediaUrl of mediaUrls) {
+                    const result = await uploadToGallery(mediaUrl, {
                         Referer: 'https://weibo.com/'
-                    })
-                );
-                const uploadResults = await Promise.all(uploadPromises);
-                results.push(...uploadResults.filter((result): result is string => result !== null));
+                    });
+                    if (result !== null) {
+                        results.push(result);
+                    }
+                }
 
                 await saveMedias(results.map((url, index) => ({
                     galleryMediaUrl: url,

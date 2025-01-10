@@ -2,6 +2,7 @@ import axios from 'axios';
 import sharp from 'sharp';
 import { log } from '../log';
 import { Readable } from 'stream';
+import { retryRequest } from '../index';
 
 const GALLERY_URL = 'https://gallery233.pages.dev';
 const SUPPORTED_EXTENSIONS = {
@@ -100,7 +101,7 @@ export async function uploadToGallery(
                 url,
                 responseType: 'arraybuffer',
                 headers: {
-                    'host': new URL(url).hostname,
+                    'Host': new URL(url).hostname,
                     ...headers
                 },
                 timeout: 60000, // 60秒超时
@@ -127,25 +128,24 @@ export async function uploadToGallery(
                 log(`AVIF转换失败: ${url}, ${error}`, 'error');
             }
         }
-
+        const compressedSize = uploadBuffer.length;
+        const compressionRatio = ((compressedSize / originalSize) * 100).toFixed(2);
         const formData = new FormData();
         formData.append('file', new Blob([uploadBuffer], { type: mimeType }), fileName);
-
-        const uploadResponse = await axios.post(`${GALLERY_URL}/upload`, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            }
+        
+        const uploadResponse = await retryRequest(async () => {
+            const response = await axios.post(`${GALLERY_URL}/upload`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            return response;
         });
-
-        if (uploadResponse.status !== 200) {
-            throw new Error(`上传失败，状态码: ${uploadResponse.status}`);
-        }
-
+      
         const data = uploadResponse.data;
         if (!data[0]?.src) throw new Error('上传响应缺少文件URL');
         
-        const compressedSize = uploadBuffer.length;
-        const compressionRatio = ((compressedSize / originalSize) * 100).toFixed(2);
+    
         log(`上传成功: ${url} (原始: ${formatFileSize(originalSize)} → 压缩: ${formatFileSize(compressedSize)}, 压缩后: ${compressionRatio}%)`, 'success');
         
         return `${GALLERY_URL}${data[0].src}`;
