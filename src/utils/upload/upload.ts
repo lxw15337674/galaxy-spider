@@ -10,6 +10,7 @@ const SUPPORTED_EXTENSIONS = {
     'png': 'image/png',
     'gif': 'image/gif',
     'webp': 'image/webp',
+    'avif': 'image/avif',
     'mov': 'video/quicktime',
     'mp4': 'video/mp4'
 } as const;
@@ -84,7 +85,9 @@ export async function uploadToGallery(
                     'Host': new URL(url).hostname,
                     ...headers,
                 },
-                timeout: 30000,
+                timeout: 60000, // 60秒超时
+                maxContentLength: 50 * 1024 * 1024, // 50MB 最大限制
+                maxBodyLength: 50 * 1024 * 1024,
             });
             uploadBuffer = await streamToBuffer(response.data);
         } catch (error) {
@@ -100,6 +103,9 @@ export async function uploadToGallery(
                     'host': new URL(url).hostname,
                     ...headers
                 },
+                timeout: 60000, // 60秒超时
+                maxContentLength: 50 * 1024 * 1024, // 50MB 最大限制
+                maxBodyLength: 50 * 1024 * 1024,
             });
             uploadBuffer = Buffer.from(response.data);
         }catch(error){
@@ -112,16 +118,15 @@ export async function uploadToGallery(
         let mimeType = SUPPORTED_EXTENSIONS[extension as SupportedExtension] || 'application/octet-stream';
         let fileName = getFileName(url);
 
-        // webp上传会失败
-        // if (isImage(extension)) {
-        //     try {
-        //         uploadBuffer = await sharp(uploadBuffer).webp({ quality: 90 }).toBuffer();
-        //         mimeType = 'image/webp';
-        //         fileName = fileName.replace(/\.[^.]+$/, '.webp');
-        //     } catch (error) {
-        //         log(`WebP转换失败: ${url}, ${error}`, 'error');
-        //     }
-        // }
+        if (isImage(extension)) {
+            try {
+                uploadBuffer = await sharp(uploadBuffer).avif({ quality: 80 }).toBuffer();
+                mimeType = 'image/avif';
+                fileName = fileName.replace(/\.[^.]+$/, '.avif');
+            } catch (error) {
+                log(`AVIF转换失败: ${url}, ${error}`, 'error');
+            }
+        }
 
         const formData = new FormData();
         formData.append('file', new Blob([uploadBuffer], { type: mimeType }), fileName);

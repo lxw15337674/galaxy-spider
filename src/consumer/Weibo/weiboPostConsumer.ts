@@ -1,10 +1,10 @@
 import { UploadStatus } from '@prisma/client';
 import { browserManager } from '../../browser';
+import { saveMedias } from '../../db/media';
 import { getPendingPost, updatePostStatus } from '../../db/post';
 import { uploadToGallery } from '../../utils/upload/upload';
 import type { WeiboData } from '../types';
-import { saveMedias } from '../../db/media';
-import { downloadVideo } from '../../utils/downloadVideo';
+import type { Page } from 'playwright';
 
 interface MediaInfo {
     width: number | null;
@@ -48,15 +48,9 @@ function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
  * @param id 微博帖子ID
  * @returns 微博帖子的渲染数据，如果获取失败则返回 null
  */
-export const getWeiboPost = async (id: string) => {
-    let context = null;
+export const getWeiboPost = async (id: string, page: Page) => {
     try {
-        const browser = await browserManager.getBrowser();
-        context = await browser.newContext();
-        const page = await context.newPage();
-
         const postUrl = `https://m.weibo.cn/detail/${id}`;
-        // 导航到微博帖子页面
         await page.goto(postUrl, { waitUntil: 'networkidle' });
 
         // 提取 $render_data
@@ -103,49 +97,58 @@ export const getWeiboPost = async (id: string) => {
     } catch (error) {
         console.error(`❌ 数据获取失败: ${id}`, error);
         return null;
-    } finally {
-        // 确保上下文被关闭
-        if (context) {
-            await context.close();
-        }
     }
 };
 
 export const runWeiboPostConsumer = async () => {
-    const post = await getPendingPost();
-    if (!post) {
-        return;
-    }
-    // 获取微博帖子数据
-    const data = await getWeiboPost(post.platformId);
-    // const data = await getWeiboPost('5120079876328548');
-    if (!data) {
-        return;
-    }
-    const { medias } = data;
-  
-    // 保存图片到gallery
-    const mediaUrls = medias.map(media => media.originMediaUrl);
-    for(const mediaUrl of mediaUrls){
-        const result = await uploadToGallery(mediaUrl,{
-            Host: 'wx3.sinaimg.cn',
-            Referer: 'https://weibo.com/'
-        });
-        console.log(result)
-    }
+    try {
+        const page = await browserManager.getPage();
 
-    // await saveMedias(results.map((url, index) => ({
-    //     galleryMediaUrl: url,
-    //     originMediaUrl: medias[index].originMediaUrl,
-    //     postId: post.id,
-    //     originSrc: medias[index].originSrc,
-    //     userId: post.userId,
-    //     width: medias[index].width,
-    //     height: medias[index].height,
-    // })));
-    // 更新post状态
-    // if (!medias.length) {
-    //     await updatePostStatus(post.id, UploadStatus.UPLOADED);
-    //     return;
-    // }
+        while (true) {
+            const post = await getPendingPost();
+            if (!post) {
+                console.log('没有待处理的帖子了');
+                break;
+            }
+
+            try {
+                const data = await getWeiboPost(post.platformId, page);
+                if (!data) {
+                    await updatePostStatus(post.id, UploadStatus.FAILED);
+                    continue;
+                }
+                const { medias } = data;
+
+                // 保存图片到gallery
+                const mediaUrls = medias.map(media => media.originMediaUrl);
+                const results: string[] = [];
+                const uploadPromises = mediaUrls.map(mediaUrl => 
+                    uploadToGallery(mediaUrl, {
+                        Host: 'wx3.sinaimg.cn',
+                        Referer: 'https://weibo.com/'
+                    })
+                );
+                const uploadResults = await Promise.all(uploadPromises);
+                results.push(...uploadResults.filter((result): result is string => result !== null));
+
+                await saveMedias(results.map((url, index) => ({
+                    galleryMediaUrl: url,
+                    originMediaUrl: medias[index].originMediaUrl,
+                    postId: post.id,
+                    originSrc: medias[index].originSrc,
+                    userId: post.userId,
+                    width: medias[index].width ? Number(medias[index].width) : null,
+                    height: medias[index].height ? Number(medias[index].height) : null,
+                    status: UploadStatus.UPLOADED
+                })));
+
+                await updatePostStatus(post.id, UploadStatus.UPLOADED);
+            } catch (error) {
+                console.error(`处理帖子 ${post.id} 失败:`, error);
+                await updatePostStatus(post.id, UploadStatus.FAILED);
+            }
+        }
+    } finally {
+        await browserManager.cleanup();
+    }
 };
