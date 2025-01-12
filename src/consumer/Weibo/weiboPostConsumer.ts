@@ -153,7 +153,6 @@ export const runWeiboPostConsumer = async () => {
 
                 const results = (await Promise.all(uploadPromises)).filter((url): url is string => url !== null);
                 
-                log(`正在保存 ${results.length} 个媒体记录到数据库...`, 'info');
                 await saveMedias(results.map((url, index) => ({
                     galleryMediaUrl: url,
                     originMediaUrl: medias[index].originMediaUrl,
