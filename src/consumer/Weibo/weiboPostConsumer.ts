@@ -162,7 +162,8 @@ export const runWeiboPostConsumer = async () => {
                     producerId: post.producerId,
                     width: medias[index].width,
                     height: medias[index].height,
-                    status: UploadStatus.UPLOADED
+                    status: UploadStatus.UPLOADED,
+                    createTime: post.createTime
                 })));
 
                 await updatePostStatus(post.id, UploadStatus.UPLOADED);

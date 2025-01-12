@@ -6,13 +6,15 @@ export const createPost = async (data: {
     userId: string;
     platformId: string;
     producerId: string;
+    createTime: Date;
 }): Promise<Post> => {
     const postData = {
         userId: data.userId,
         platform: data.platform,
         platformId: data.platformId,
         producerId: data.producerId,
-        status: UploadStatus.PENDING
+        status: UploadStatus.PENDING,
+        createTime: data.createTime
     };
     return await prisma.post.upsert({
         where: {
@@ -23,7 +25,8 @@ export const createPost = async (data: {
         },
         update: {
             userId: data.userId,
-            producerId: data.producerId
+            producerId: data.producerId,
+            createTime: data.createTime
         },
         create: postData
     });

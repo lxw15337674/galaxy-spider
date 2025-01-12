@@ -76,7 +76,8 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             platformId: post.id,
             platform: 'WEIBO' as Platform,
             userId: producer.producerId || '',
-            producerId: producer.id
+            producerId: producer.id,
+            createTime: new Date(post.created_at)
         });
         log(`创建帖子成功: ${createdPost.id}`, 'info');
         return createdPost ? 1 : 0;
