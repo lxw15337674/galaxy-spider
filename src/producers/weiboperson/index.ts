@@ -15,7 +15,7 @@ const API_CONFIG = {
         "accept": "application/json, text/plain, */*",
         "mweibo-pwa": "1"
     },
-    delayMs: 10000,
+    delayMs: 5000,
     maxPages: 20
 } as const;
 
@@ -140,15 +140,16 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
     return processedCount;
 };
 
- export const processWeiboPerson = async ( maxPages: number = API_CONFIG.maxPages): Promise<number> => {
+export const processWeiboPerson = async (maxPages: number = API_CONFIG.maxPages): Promise<number> => {
     let totalProcessed = 0;
     const producers = await getProducers(ProducerType.WEIBO_PERSONAL);
     log(`共 ${producers.length} 个微博`, 'info');
-    for (const producer of producers) {
-        log(`开始处理 ${producer.name || producer.producerId}`, 'info');
+    for (let i = 0; i < producers.length; i++) {
+        const producer = producers[i];
+        log(`[进度 ${i + 1}/${producers.length}] 开始处理 ${producer.name || producer.producerId}`, 'info');
         const count = await processUserPost(producer, maxPages);
         totalProcessed += count;
-        log(`处理完成，成功处理 ${count} 条微博`, 'info');
+        log(`[进度 ${i + 1}/${producers.length}] 处理完成，成功处理 ${count} 条微博`, 'info');
         await sleep(API_CONFIG.delayMs);
     }
 
