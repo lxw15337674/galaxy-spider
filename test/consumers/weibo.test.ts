@@ -27,7 +27,6 @@ describe('Weibo Video Tests', () => {
         // 测试运行
         const data = await getWeiboPost('5035378711202553', page);
         expect(data).toBeDefined();
-        expect(data?.medias).toBeDefined();
         expect(Array.isArray(data?.medias)).toBe(true);
     });
 
