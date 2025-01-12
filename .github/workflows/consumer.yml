@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: '30 */12 * * *'  # 每12小时运行一次
   workflow_dispatch:         # 支持手动触发
-  push:
-    branches:
-      - main
 
 jobs:
   produce-images:
