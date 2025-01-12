@@ -101,38 +101,58 @@ export const getWeiboPost = async (id: string, page: Page) => {
 };
 
 export const runWeiboPostConsumer = async () => {
+    console.log('🚀 微博帖子消费者启动...');
+    let processedCount = 0;
+    const startTime = new Date();
+    
     try {
         const page = await browserManager.getPage();
+        console.log('✅ 浏览器页面初始化完成');
 
         while (true) {
             const post = await getPendingPost();
             if (!post) {
-                console.log('没有待处理的帖子了');
+                const endTime = new Date();
+                const duration = (endTime.getTime() - startTime.getTime()) / 1000;
+                console.log(`✨ 没有待处理的帖子了`);
+                console.log(`📊 总计处理: ${processedCount} 个帖子, 耗时: ${duration.toFixed(1)}秒`);
                 break;
             }
+
+            const postStartTime = new Date();
+            console.log(`\n📝 [${++processedCount}] 正在处理平台 ID: ${post.platformId}`);
 
             try {
                 const data = await getWeiboPost(post.platformId, page);
                 if (!data) {
+                    console.log(`❌ 获取帖子数据失败，ID: ${post.platformId}`);
                     await updatePostStatus(post.id, UploadStatus.FAILED);
                     continue;
                 }
                 const { medias } = data;
+                console.log(`📸 发现 ${medias.length} 个媒体文件需要处理`);
 
                 // 保存图片到gallery
                 const mediaUrls = medias.map(media => media.originMediaUrl);
                 const results: string[] = [];
+                let successCount = 0;
                 
                 // Sequential upload
-                for (const mediaUrl of mediaUrls) {
+                for (const [index, mediaUrl] of mediaUrls.entries()) {
+                    console.log(`⬆️ 正在上传第 ${index + 1}/${mediaUrls.length} 个媒体文件到图库...`);
                     const result = await uploadToGallery(mediaUrl, {
                         Referer: 'https://weibo.com/'
                     });
                     if (result !== null) {
                         results.push(result);
+                        successCount++;
+                        console.log(`✅ 第 ${index + 1} 个媒体文件上传成功 (${successCount}/${mediaUrls.length})`);
+                    } else {
+                        console.log(`⚠️ 第 ${index + 1} 个媒体文件上传失败 (${successCount}/${mediaUrls.length})`);
                     }
                 }
 
+                console.log(`💾 正在保存 ${results.length} 个媒体记录到数据库...`);
                 await saveMedias(results.map((url, index) => ({
                     galleryMediaUrl: url,
                     originMediaUrl: medias[index].originMediaUrl,
@@ -146,12 +166,19 @@ export const runWeiboPostConsumer = async () => {
                 })));
 
                 await updatePostStatus(post.id, UploadStatus.UPLOADED);
+                const postEndTime = new Date();
+                const postDuration = (postEndTime.getTime() - postStartTime.getTime()) / 1000;
+                console.log(`✅ 帖子处理完成，ID: ${post.id}，耗时: ${postDuration.toFixed(1)}秒`);
             } catch (error) {
-                console.error(`处理帖子 ${post.id} 失败:`, error);
+                console.error(`❌ 处理帖子失败，ID: ${post.id}:`, error);
                 await updatePostStatus(post.id, UploadStatus.FAILED);
             }
         }
     } finally {
+        console.log('🧹 正在清理浏览器资源...');
         await browserManager.cleanup();
+        const endTime = new Date();
+        const totalDuration = (endTime.getTime() - startTime.getTime()) / 1000;
+        console.log(`👋 微博帖子消费者结束运行，总计处理: ${processedCount} 个帖子，总耗时: ${totalDuration.toFixed(1)}秒`);
     }
 };
