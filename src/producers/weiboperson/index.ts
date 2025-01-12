@@ -1,9 +1,10 @@
 import axios from 'axios';
-import type { Producer } from '@prisma/client';
+import type { Producer, Platform, ProducerType, UploadStatus } from '@prisma/client';
 import { sleep } from '../../utils';
 import type { WeiboMblog } from '../../types/weibo';
 import { log } from '../../utils/log';
 import { createPost } from '../../db/post';
+import { saveMedias } from '../../db/media';
 import type { PageResult } from './types';
 
 // Constants
@@ -53,102 +54,107 @@ const fetchPage = async (userId: string, containerId: string, sinceId?: string):
     };
 };
 
-const processPost = async (post: WeiboMblog, userId: string): Promise<number> => {
-    const pics = post?.pics || [];
-    
-    if (!pics || (typeof pics === 'object' && Object.keys(pics).length === 0)) {
-        return 0;
-    }
-
+const processPost = async (post: WeiboMblog, producer: Producer): Promise<number> => {
     try {
-        await createPost({
-            userId: String(post.user.id),
-            platform: 'WEIBO',
+        // Create post record first
+        const createdPost = await createPost({
             platformId: post.id,
+            platform: 'WEIBO' as Platform,
+            userId: producer.producerId || ''
         });
-        
-        const picsCount = Array.isArray(pics) ? pics.length : Object.keys(pics).length;
-        log(`已保存帖子 ${post.id}，包含 ${picsCount} 张图片`);
-        return picsCount;
+
+        // Then create media records
+        const medias = post.pics?.map(pic => ({
+            width: pic.geo?.width || null,
+            height: pic.geo?.height || null,
+            originSrc: `https://m.weibo.cn/${producer.producerId}/${post.id}`,
+            originMediaUrl: pic.large?.url || pic.url,
+            galleryMediaUrl: null,
+            userId: producer.producerId || '',
+            producerId: producer.id,
+            postId: createdPost.id
+        })) || [];
+
+        if (medias.length > 0) {
+            await saveMedias(medias);
+        }
+
+        return 1;
     } catch (error) {
-        log(`保存帖子失败: ${error}`, 'error');
+        log(`处理微博帖子失败: ${error}`, 'error');
         return 0;
     }
 };
 
-const processUserPosts = async (userId: string,maxPages:number): Promise<number> => {
-    let totalProcessed = 0;
+const processUserPosts = async (producer: Producer, maxPages: number): Promise<number> => {
+    if (!producer.producerId) {
+        log(`Producer ${producer.id} missing producerId`, 'error');
+        return 0;
+    }
+
+    log(`开始获取用户 ${producer.name || producer.producerId} 的containerId`, 'info');
+    const containerId = await getContainerId(producer.producerId);
+    if (!containerId) return 0;
+
+    let processedCount = 0;
     let sinceId: string | undefined;
 
-    try {
-        const containerId = await getContainerId(userId);
-        if(!containerId) {
-            log(`未找到用户 ${userId} 的containerId，跳过`, 'warn');
-            return 0;
-        }
-        for (let page = 0; page < maxPages; page++) {
-            try {
-                const { cards, sinceId: newSinceId } = await fetchPage(userId, containerId, sinceId);
-
-                if (!cards.length) {
-                    log('没有更多微博数据', 'info');
-                    break;
-                }
-
-                sinceId = newSinceId;
-                log(`成功获取第 ${page + 1} 页微博`, 'success');
-
-                for (const post of cards) {
-                    try {
-                        totalProcessed += await processPost(post, userId);
-                    } catch (error) {
-                        log(`处理单条微博失败: ${error}`, 'error');
+    log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${maxPages} 页`, 'info');
+    for (let page = 0; page < maxPages; page++) {
+        try {
+            log(`正在获取第 ${page + 1} 页数据...`, 'info');
+            const { cards, sinceId: newSinceId } = await fetchPage(producer.producerId, containerId, sinceId);
+            log(`第 ${page + 1} 页获取成功，包含 ${cards.length} 条微博`, 'info');
+            
+            let pageProcessedCount = 0;
+            for (const card of cards) {
+                if (card.mblog) {
+                    const result = await processPost(card.mblog, producer);
+                    processedCount += result;
+                    pageProcessedCount += result;
+                    if (result) {
+                        log(`成功处理微博 ${card.mblog.id}`, 'info');
                     }
                 }
+            }
 
-                await sleep(API_CONFIG.delayMs);
-            } catch (error) {
-                log(`获取第 ${page + 1} 页微博失败: ${error}`, 'error');
+            // 如果这一页所有微博都已存在，则停止爬取
+            if (cards.length > 0 && pageProcessedCount === 0) {
+                log(`当前页面所有微博都已存在，停止爬取`, 'info');
                 break;
             }
+
+            if (!newSinceId) {
+                log(`没有更多数据，结束获取`, 'info');
+                break;
+            }
+            sinceId = newSinceId;
+            await sleep(API_CONFIG.delayMs);
+
+        } catch (error) {
+            log(`获取第${page + 1}页失败: ${error}`, 'error');
+            break;
         }
-    } catch (error) {
-        log('获取微博列表失败', 'error');
+    }
+
+    log(`用户 ${producer.name || producer.producerId} 处理完成，共处理 ${processedCount} 条微博`, 'info');
+    return processedCount;
+};
+
+export const processWeiboPerson = async (producers: Producer[], maxPages: number = API_CONFIG.maxPages): Promise<number> => {
+    let totalProcessed = 0;
+
+    for (const producer of producers) {
+        if (producer.type !== 'WEIBO_PERSONAL') {
+            continue;
+        }
+
+        log(`开始处理 ${producer.name || producer.producerId}`, 'info');
+        const count = await processUserPosts(producer, maxPages);
+        totalProcessed += count;
+        log(`处理完成，成功处理 ${count} 条微博`, 'info');
+        await sleep(API_CONFIG.delayMs);
     }
 
     return totalProcessed;
-};
-
-export const processWeiboPerson = async (producers: Producer[],maxPages:number=API_CONFIG.maxPages): Promise<number> => {
-    try {
-        log('==== 开始微博数据获取 ====');
-        let totalCount = 0;
-
-        for (const producer of producers) {
-            if (producer.weiboIds.length === 0) {
-                log(`生产者 ${producer.name} 未找到微博ID，跳过`, 'warn');
-                continue;
-            }
-
-            log(`\n👤 处理生产者: ${producer.name} (${producer.id})`);
-            log(`📋 找到 ${producer.weiboIds.length} 个微博ID待处理`);
-
-            for (const userId of producer.weiboIds) {
-                try {
-                    log(`\n🔄 开始处理用户 ${userId} 的微博`);
-                    const processedCount = await processUserPosts(userId,maxPages);
-                    totalCount += processedCount;
-                    log(`用户 ${userId} 处理完成，共处理 ${processedCount} 张图片`, 'success');
-                } catch (error) {
-                    log(`用户 ${userId} 处理失败: ${error}`, 'error');
-                }
-            }
-        }
-        
-        log(`\n==== 微博数据获取完成，共处理 ${totalCount} 张图片 ====`, 'success');
-        return totalCount;
-    } catch (error) {
-        log('微博处理主函数出错: ' + error, 'error');
-        return 0;
-    }
 }; 

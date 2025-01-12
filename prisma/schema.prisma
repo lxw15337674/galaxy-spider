@@ -84,21 +84,26 @@ model Anniversary {
 
 model Media {
   id              Int       @id @default(autoincrement())
-  width           Int?
-  height          Int?
+  width           Int?      @db.Integer
+  height          Int?      @db.Integer
   postId          String?
-  originSrc       String?
+  originSrc       String?   @db.Text
   userId          String?
   createTime      DateTime? @default(now())
   deletedAt       DateTime?
-  updateTime      DateTime  @default(now())
-  galleryMediaUrl String?
-  originMediaUrl  String?
+  updateTime      DateTime  @default(now()) @updatedAt
+  galleryMediaUrl String?   @db.Text
+  originMediaUrl  String?   @db.Text
   status         UploadStatus @default(PENDING)
+  producerId     String?
+  producer       Producer?  @relation("Media", fields: [producerId], references: [id], onDelete: SetNull)
+  post           Post?      @relation("PostMedia", fields: [postId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([createTime])
   @@index([postId])
+  @@index([producerId])
+  @@index([status, createTime])
 }
 
 enum UploadStatus {
@@ -109,13 +114,17 @@ enum UploadStatus {
 
 model Producer {
   id         String         @id @default(cuid())
+  producerId String?
   name       String?
   createTime DateTime       @default(now())
-  updateTime DateTime       @default(now())
+  updateTime DateTime       @default(now()) @updatedAt
   deletedAt  DateTime?
   type       ProducerType   @default(WEIBO_PERSONAL)
   tags       ProducerTag[] @relation("ProducerToProducerTag")
+  medias     Media[]      @relation("Media")
+  posts      Post[]       @relation("ProducerPosts")
   @@map("producer")
+  @@index([type, createTime])
 }
 
 enum ProducerType {
@@ -154,13 +163,17 @@ model Post {
   platform   Platform  // 平台
   platformId String    // 平台上的原始ID
   createTime DateTime  @default(now())
-  updateTime DateTime  @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
   deletedAt  DateTime?
-  status     UploadStatus @default(PENDING) 
+  status     UploadStatus @default(PENDING)
+  producer   Producer  @relation("ProducerPosts", fields: [producerId], references: [id])
+  medias     Media[] @relation("PostMedia")
 
   @@unique([platform, platformId])
   @@index([userId])
   @@index([createTime])
+  @@index([status, createTime])
+  @@index([producerId, createTime])
 }
 
 enum Platform {
