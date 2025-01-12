@@ -30,8 +30,8 @@ const getContainerId = async (userId: string): Promise<string|null> => {
         log(`获取到用户containerId: ${containerId}`, 'info');
         return containerId;
     } catch (error) {
-        log( '获取用户信息失败');
-        return null
+        log('获取用户信息失败: ' + userId, 'error');
+        return null;
     }
 };
 
@@ -58,6 +58,10 @@ const fetchPage = async (userId: string, containerId: string, sinceId?: string):
 
 const processPost = async (post: WeiboMblog, producer: Producer): Promise<number> => {
     try {
+        if(!post?.pics?.length ){
+            log(`帖子 ${post.id} 未包含图片，跳过`, 'info');
+            return 0;
+        }
         // Create post record first
         const createdPost = await createPost({
             platformId: post.id,
@@ -65,6 +69,7 @@ const processPost = async (post: WeiboMblog, producer: Producer): Promise<number
             userId: producer.producerId || '',
             producerId: producer.id
         });
+        log(`创建帖子成功: ${createdPost.id}，包含图片: ${post.pics?.length}`, 'info');
         return createdPost ? 1 : 0;
     } catch (error) {
         log(`处理微博帖子失败: ${error}`, 'error');
@@ -107,12 +112,6 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
                     if (result) {
                         log(`成功处理微博 ${card.id}`, 'info');
                     }
-            }
-
-            // 如果这一页所有微博都已存在，则停止爬取
-            if (cards.length > 0 && pageProcessedCount === 0) {
-                log(`当前页面所有微博都已存在，停止爬取`, 'info');
-                break;
             }
 
             if (!newSinceId) {
