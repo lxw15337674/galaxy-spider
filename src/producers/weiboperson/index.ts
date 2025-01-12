@@ -20,7 +20,17 @@ const API_CONFIG = {
     maxPages: 20
 } as const;
 
+function hasMedia(mblog: WeiboMblog): boolean {
+    // 检查是否有图片
+    const hasImages = (mblog.pic_ids?.length > 0) || (mblog.pics && mblog.pics.length > 0);
 
+    // 检查是否有视频
+    const hasVideo =
+        (mblog.page_info?.type === "video") ||
+        (mblog.pics?.some(pic => pic.type === "video") ?? false);
+
+    return hasImages || hasVideo;
+}
 
 // API functions
 const getContainerId = async (userId: string): Promise<string|null> => {
@@ -58,8 +68,8 @@ const fetchPage = async (userId: string, containerId: string, sinceId?: string):
 
 export const processPost = async (post: WeiboMblog, producer: Producer): Promise<number> => {
     try {
-        if(!post?.pics?.length ){
-            log(`帖子 ${post.id} 未包含图片，跳过`, 'info');
+        if (!hasMedia(post) ){
+            log(`帖子 ${post.id} 未包含媒体，跳过`, 'info');
             return 0;
         }
         // Create post record first
@@ -69,7 +79,7 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             userId: producer.producerId || '',
             producerId: producer.id
         });
-        log(`创建帖子成功: ${createdPost.id}，包含图片: ${post.pics?.length}`, 'info');
+        log(`创建帖子成功: ${createdPost.id}`, 'info');
         return createdPost ? 1 : 0;
     } catch (error) {
         log(`处理微博帖子失败: ${error}`, 'error');
