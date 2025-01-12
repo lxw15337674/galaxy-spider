@@ -23,10 +23,9 @@ describe('Weibo Video Tests', () => {
     });
 
     it('should fetch media info successfully', async () => {
-        // Get a page instance first
         const page = await browserManager.getPage();
         // 测试运行
-        const data = await getWeiboPost('5120079876328548', page);
+        const data = await getWeiboPost('5035378711202553', page);
         expect(data).toBeDefined();
         expect(data?.medias).toBeDefined();
         expect(Array.isArray(data?.medias)).toBe(true);
@@ -90,3 +89,4 @@ describe('Weibo Video Tests', () => {
         }
     });
 }); 
+// 5035378711202553

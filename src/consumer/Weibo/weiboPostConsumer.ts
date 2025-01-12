@@ -56,8 +56,6 @@ export const getWeiboPost = async (id: string, page: Page) => {
         // 提取 $render_data
         const renderData = await page.evaluate(() => {
             const data = (window as any).$render_data as WeiboData;
-            if (!data?.status?.pics) return null;
-
             // 处理视频信息
             if (data.status.page_info?.type === 'video') {
                 const video = data.status.page_info;
@@ -81,7 +79,7 @@ export const getWeiboPost = async (id: string, page: Page) => {
                         }
                     },
                     type: 'video',
-                    videoSrc: video.media_info?.stream_url_hd || video.media_info?.stream_url
+                    videoSrc: video.media_info?.stream_url_hd || video.media_info?.stream_url || Object.values(video.urls ||{})[0]
                 });
             }
             return data;
