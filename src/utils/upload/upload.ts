@@ -144,11 +144,11 @@ export async function uploadToGallery(
       
         const data = uploadResponse.data;
         if (!data[0]?.src) throw new Error('上传响应缺少文件URL');
-        
+        const galleryUrl = `${GALLERY_URL}${data[0].src}`;
     
-        log(`上传成功: ${url} (原始: ${formatFileSize(originalSize)} → 压缩: ${formatFileSize(compressedSize)}, 压缩后: ${compressionRatio}%)`, 'success');
+        log(`上传成功: ${galleryUrl} (原始: ${formatFileSize(originalSize)} → 压缩: ${formatFileSize(compressedSize)}, 压缩后: ${compressionRatio}%)`, 'success');
         
-        return `${GALLERY_URL}${data[0].src}`;
+        return galleryUrl
     } catch (error) {
         log(`上传失败: ${url}, ${error}`, 'error');
         return null;
