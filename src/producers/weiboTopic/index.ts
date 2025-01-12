@@ -4,6 +4,8 @@ import { sleep } from '../../utils';
 import { log } from '../../utils/log';
 import { createPost } from '../../db/post';
 import { getProducers } from '../../db/producer';
+import type { WeiboMblog } from '../../types/weibo';
+import { processPost } from '../weiboperson';
 
 //Constants
 const API_CONFIG = {
@@ -15,25 +17,7 @@ const API_CONFIG = {
     maxPages: 20
 } as const;
 
-const processPost = async (post: any, userId: string, producer: Producer): Promise<number> => {
-    try {
-        if (!post.pics?.length) return 0;
-        
-        await createPost({
-            platform: 'WEIBO',
-            userId: String(userId),
-            platformId: post.id,
-            producerId: producer.id,
-        });
-        
-        log(`已保存帖子 ${post.id}，包含 ${post.pics.length} 张图片`);
-        return post.pics.length;
-    } catch (error) {
-        log(`保存帖子失败: ${error}`, 'error');
-        return 0;
-    }
-};
-
+ 
 export const processTopicPost = async (producer: Producer, maxPages: number): Promise<number> => {
     if (!producer.producerId) {
         log(`生产者 ${producer.name} 未找到话题ID，跳过`, 'warn');
@@ -66,7 +50,7 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
             log(`正在处理第 ${page + 1} 页，共找到 ${validCards.length} 条帖子`);
 
             for (const card of validCards) {
-                const count = await processPost(card.mblog, String(card.mblog.user.id), producer);
+                const count = await processPost(card.mblog, producer);
                 totalProcessed += count;
             }
 

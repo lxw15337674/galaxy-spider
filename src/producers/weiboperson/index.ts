@@ -56,7 +56,7 @@ const fetchPage = async (userId: string, containerId: string, sinceId?: string):
     };
 };
 
-const processPost = async (post: WeiboMblog, producer: Producer): Promise<number> => {
+export const processPost = async (post: WeiboMblog, producer: Producer): Promise<number> => {
     try {
         if(!post?.pics?.length ){
             log(`帖子 ${post.id} 未包含图片，跳过`, 'info');
