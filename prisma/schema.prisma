@@ -108,19 +108,34 @@ enum UploadStatus {
 }
 
 model Producer {
-  id            String    @id @default(cuid())
-  weiboIds      String[] @default([])
-  xiaohongshuIds String[] @default([])
-  douyinIds     String[] @default([])
-  weiboChaohua  String?
-  createTime    DateTime  @default(now())
-  updateTime    DateTime  @default(now())
-  deletedAt     DateTime?
-  name          String?
-  weiboTopicIds String[] @default([])
+  id         String         @id @default(cuid())
+  name       String?
+  createTime DateTime       @default(now())
+  updateTime DateTime       @default(now())
+  deletedAt  DateTime?
+  type       ProducerType   @default(WEIBO_PERSONAL)
+  tags       ProducerTag[] @relation("ProducerToProducerTag")
   @@map("producer")
 }
 
+enum ProducerType {
+  WEIBO_PERSONAL    // 个人微博
+  WEIBO_SUPER_TOPIC // 微博超话
+  XIAOHONGSHU_PERSONAL // 个人小红书
+  XIAOHONGSHU_SUPER_TOPIC // 小红书超话
+  DOUYIN_PERSONAL // 个人抖音
+  DOUYIN_SUPER_TOPIC // 抖音超话
+}
+
+model ProducerTag {
+  id         String     @id @default(uuid())
+  name       String     @unique
+  remark     String?
+  createTime DateTime   @default(now())
+  updateTime DateTime   @default(now())
+  deletedAt  DateTime?
+  producers  Producer[] @relation("ProducerToProducerTag")
+}
 
 model TaskTag {
   id         String    @id @default(uuid())
@@ -135,7 +150,7 @@ model TaskTag {
 model Post {
   id         String    @id @default(uuid())
   producerId String    // 生产者ID
-  userId     String    // 发布者ID
+  userId     String    
   platform   Platform  // 平台
   platformId String    // 平台上的原始ID
   createTime DateTime  @default(now())
