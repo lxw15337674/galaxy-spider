@@ -121,7 +121,7 @@ export async function uploadToGallery(
 
         if (isImage(extension)) {
             try {
-                uploadBuffer = await sharp(uploadBuffer).avif({ quality: 90 }).toBuffer();
+                uploadBuffer = await sharp(uploadBuffer).avif({ quality: 80 }).toBuffer();
                 mimeType = 'image/avif';
                 fileName = fileName.replace(/\.[^.]+$/, '.avif');
             } catch (error) {
