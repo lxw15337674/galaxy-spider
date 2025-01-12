@@ -1,10 +1,8 @@
 import axios from 'axios';
-import { ProducerType, UploadStatus, type Producer } from '@prisma/client';
+import { ProducerType, type Producer } from '@prisma/client';
 import { sleep } from '../../utils';
 import { log } from '../../utils/log';
-import { createPost } from '../../db/post';
 import { getProducers } from '../../db/producer';
-import type { WeiboMblog } from '../../types/weibo';
 import { processPost } from '../weiboperson';
 
 //Constants

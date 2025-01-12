@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { type Producer, type Platform, ProducerType, type UploadStatus } from '@prisma/client';
+import { type Producer, type Platform, ProducerType } from '@prisma/client';
 import { sleep } from '../../utils';
 import type { WeiboMblog } from '../../types/weibo';
 import { log } from '../../utils/log';
