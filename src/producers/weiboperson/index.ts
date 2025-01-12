@@ -5,8 +5,7 @@ import type { WeiboMblog } from '../../types/weibo';
 import { log } from '../../utils/log';
 import { createPost } from '../../db/post';
 import type { PageResult } from './types';
-import { getProducers } from '../../db/producer';
-import { getProducerById } from '../../db/producer';
+import { getProducers, getProducerById, updateProducerLastPostTime } from '../../db/producer';
 
 // Constants
 const API_CONFIG = {
@@ -16,9 +15,10 @@ const API_CONFIG = {
         "mweibo-pwa": "1"
     },
     delayMs: 5000,
-    maxPages: 20
+    defaultMaxPages: 20,
+    postedMaxPages: 1
 } as const;
-
+    
 function hasMedia(mblog: WeiboMblog): boolean {
     // 检查是否有图片
     const hasImages = (mblog.pic_ids?.length > 0) || (mblog.pics && mblog.pics.length > 0);
@@ -100,6 +100,12 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
         return 0;
     }
 
+    // 如果有lastPostTime，则只爬取1页
+    const actualMaxPages = existingProducer.lastPostTime ? Math.min(API_CONFIG.postedMaxPages, maxPages) : maxPages;
+    if (existingProducer.lastPostTime) {
+        log(`检测到lastPostTime，限制爬取页数为${actualMaxPages}页`, 'info');
+    }
+
     log(`开始获取用户 ${producer.name || producer.producerId} 的containerId`, 'info');
     const containerId = await getContainerId(producer.producerId);
     if (!containerId) return 0;
@@ -107,8 +113,8 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
     let processedCount = 0;
     let sinceId: string | undefined;
 
-    log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${maxPages} 页`, 'info');
-    for (let page = 0; page < maxPages; page++) {
+    log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${actualMaxPages} 页`, 'info');
+    for (let page = 0; page < actualMaxPages; page++) {
         try {
             log(`正在获取第 ${page + 1} 页数据...`, 'info');
             const { cards, sinceId: newSinceId } = await fetchPage(producer.producerId, containerId, sinceId);
@@ -138,10 +144,17 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
     }
 
     log(`用户 ${producer.name || producer.producerId} 处理完成，共处理 ${processedCount} 条微博`, 'info');
+    
+    // 更新lastPostTime
+    if (processedCount > 0) {
+        await updateProducerLastPostTime(producer.id);
+        log(`已更新用户 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
+    }
+    
     return processedCount;
 };
 
-export const processWeiboPerson = async (maxPages: number = API_CONFIG.maxPages): Promise<number> => {
+export const processWeiboPerson = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
     let totalProcessed = 0;
     const producers = await getProducers(ProducerType.WEIBO_PERSONAL);
     log(`共 ${producers.length} 个微博`, 'info');

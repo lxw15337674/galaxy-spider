@@ -2,7 +2,7 @@ import axios from 'axios';
 import { ProducerType, type Producer } from '@prisma/client';
 import { sleep } from '../../utils';
 import { log } from '../../utils/log';
-import { getProducers } from '../../db/producer';
+import { getProducers, updateProducerLastPostTime } from '../../db/producer';
 import { processPost } from '../weiboperson';
 
 //Constants
@@ -12,7 +12,8 @@ const API_CONFIG = {
         "accept": "application/json, text/plain, */*",
     },
     delayMs: 5000,
-    maxPages: 20
+    defaultMaxPages: 20,
+    postedMaxPages: 5
 } as const;
 
  
@@ -22,11 +23,17 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
         return 0;
     }
 
+    // 如果有lastPostTime，则只爬取5页
+    const actualMaxPages = producer.lastPostTime ? Math.min(API_CONFIG.postedMaxPages, maxPages) : maxPages;
+    if (producer.lastPostTime) {
+        log(`检测到lastPostTime，限制爬取页数为${API_CONFIG.postedMaxPages}页`, 'info');
+    }
+
     log(`开始处理话题 ${producer.producerId}`);
     let totalProcessed = 0;
     let sinceId: string | undefined;
 
-    for (let page = 0; page < maxPages; page++) {
+    for (let page = 0; page < actualMaxPages; page++) {
         try {
             const response = await axios.get<any>(API_CONFIG.baseUrl, {
                 params: {
@@ -61,10 +68,17 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
     }
 
     log(`话题 ${producer.producerId} 处理完成，共保存 ${totalProcessed} 张有图片的帖子`, 'success');
+    
+    // 更新lastPostTime
+    if (totalProcessed > 0) {
+        await updateProducerLastPostTime(producer.id);
+        log(`已更新话题 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
+    }
+    
     return totalProcessed;
 };
 
-export const processWeiboTopic = async (maxPages:number=API_CONFIG.maxPages): Promise<number> => {
+export const processWeiboTopic = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
     const producers = await getProducers(ProducerType.WEIBO_SUPER_TOPIC);
     log(`共 ${producers.length} 个微博超话`, 'info');
     try {

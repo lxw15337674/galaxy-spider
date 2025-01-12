@@ -21,3 +21,12 @@ export const getProducerById = async (id: string) => {
   });
 };
 
+export const updateProducerLastPostTime = async (id: string) => {
+  return await prisma.producer.update({
+    where: { id },
+    data: {
+      lastPostTime: new Date()
+    }
+  });
+};
+

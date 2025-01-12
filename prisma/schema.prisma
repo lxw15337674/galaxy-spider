@@ -123,6 +123,7 @@ model Producer {
   tags       ProducerTag[] @relation("ProducerToProducerTag")
   medias     Media[]      @relation("Media")
   posts      Post[]       @relation("ProducerPosts")
+  lastPostTime DateTime?
   @@map("producer")
   @@index([type, createTime])
 }
