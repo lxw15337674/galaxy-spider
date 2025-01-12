@@ -8,8 +8,7 @@
     "produce": "vite-node ./src/produce.ts",
     "dev": "vite-node src/index.ts",
     "start": "vite-node src/index.ts",
-    "test": "vitest --debug",
-    "test:watch": "vitest --watch"
+    "test": "vitest"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

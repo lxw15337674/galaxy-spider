@@ -5,9 +5,8 @@ import { log } from './utils/log';
 
 async function main() {
     try {
-        const producers = await getProducers();
-        await processWeiboPerson(producers),
-         await  processWeiboTopic(producers)
+        await processWeiboPerson(),
+         await  processWeiboTopic()
     } catch (error) {
         log('主函数出错:' + error, 'error');
     }

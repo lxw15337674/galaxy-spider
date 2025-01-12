@@ -4,7 +4,6 @@ import { getWeiboPost, runWeiboPostConsumer } from "../../src/consumer/Weibo/wei
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
-import { downloadVideo } from "../../src/utils/downloadVideo";
 
 describe('Weibo Video Tests', () => {
     const testOutputDir = path.join(__dirname, 'test-output');
@@ -24,15 +23,18 @@ describe('Weibo Video Tests', () => {
     });
 
     it('should fetch media info successfully', async () => {
+        // Get a page instance first
+        const page = await browserManager.getPage();
         // 测试运行
-        const data = await getWeiboPost('5120079876328548');
+        const data = await getWeiboPost('5120079876328548', page);
         expect(data).toBeDefined();
         expect(data?.medias).toBeDefined();
         expect(Array.isArray(data?.medias)).toBe(true);
     });
 
     it('should verify media URL is accessible', async () => {
-        const data = await getWeiboPost('5120079876328548');
+        const page = await browserManager.getPage();
+        const data = await getWeiboPost('5120079876328548', page);
         expect(data?.medias).toBeDefined();
         expect(data?.medias?.length).toBeGreaterThan(0);
 

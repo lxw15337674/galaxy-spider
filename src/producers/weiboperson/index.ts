@@ -1,11 +1,13 @@
 import axios from 'axios';
-import type { Producer, Platform, ProducerType, UploadStatus } from '@prisma/client';
+import { type Producer, type Platform, ProducerType, type UploadStatus } from '@prisma/client';
 import { sleep } from '../../utils';
 import type { WeiboMblog } from '../../types/weibo';
 import { log } from '../../utils/log';
 import { createPost } from '../../db/post';
 import { saveMedias } from '../../db/media';
 import type { PageResult } from './types';
+import { getProducers } from '../../db/producer';
+import { getProducerById } from '../../db/producer';
 
 // Constants
 const API_CONFIG = {
@@ -60,35 +62,43 @@ const processPost = async (post: WeiboMblog, producer: Producer): Promise<number
         const createdPost = await createPost({
             platformId: post.id,
             platform: 'WEIBO' as Platform,
-            userId: producer.producerId || ''
+            userId: producer.producerId || '',
+            producerId: producer.id
         });
 
-        // Then create media records
-        const medias = post.pics?.map(pic => ({
-            width: pic.geo?.width || null,
-            height: pic.geo?.height || null,
-            originSrc: `https://m.weibo.cn/${producer.producerId}/${post.id}`,
-            originMediaUrl: pic.large?.url || pic.url,
-            galleryMediaUrl: null,
-            userId: producer.producerId || '',
-            producerId: producer.id,
-            postId: createdPost.id
-        })) || [];
+        // Then create media records if post was created successfully
+        if (createdPost && post.pics?.length) {
+            const medias = post.pics.map(pic => ({
+                width: pic.geo?.width || null,
+                height: pic.geo?.height || null,
+                originSrc: `https://m.weibo.cn/${producer.producerId}/${post.id}`,
+                originMediaUrl: pic.large?.url || pic.url,
+                galleryMediaUrl: null,
+                userId: producer.producerId || '',
+                producerId: producer.id,
+                postId: createdPost.id
+            }));
 
-        if (medias.length > 0) {
             await saveMedias(medias);
         }
 
-        return 1;
+        return createdPost ? 1 : 0;
     } catch (error) {
         log(`处理微博帖子失败: ${error}`, 'error');
         return 0;
     }
 };
 
-const processUserPosts = async (producer: Producer, maxPages: number): Promise<number> => {
+export const processUserPost = async (producer: Producer, maxPages: number): Promise<number> => {
     if (!producer.producerId) {
         log(`Producer ${producer.id} missing producerId`, 'error');
+        return 0;
+    }
+
+    // Verify producer exists in database
+    const existingProducer = await getProducerById(producer.id);
+    if (!existingProducer) {
+        log(`Producer ${producer.id} not found in database`, 'error');
         return 0;
     }
 
@@ -108,14 +118,12 @@ const processUserPosts = async (producer: Producer, maxPages: number): Promise<n
             
             let pageProcessedCount = 0;
             for (const card of cards) {
-                if (card.mblog) {
-                    const result = await processPost(card.mblog, producer);
+                    const result = await processPost(card, producer);
                     processedCount += result;
                     pageProcessedCount += result;
                     if (result) {
-                        log(`成功处理微博 ${card.mblog.id}`, 'info');
+                        log(`成功处理微博 ${card.id}`, 'info');
                     }
-                }
             }
 
             // 如果这一页所有微博都已存在，则停止爬取
@@ -141,16 +149,13 @@ const processUserPosts = async (producer: Producer, maxPages: number): Promise<n
     return processedCount;
 };
 
-export const processWeiboPerson = async (producers: Producer[], maxPages: number = API_CONFIG.maxPages): Promise<number> => {
+ export const processWeiboPerson = async ( maxPages: number = API_CONFIG.maxPages): Promise<number> => {
     let totalProcessed = 0;
-
+    const producers = await getProducers(ProducerType.WEIBO_PERSONAL);
+    log(`共 ${producers.length} 个微博`, 'info');
     for (const producer of producers) {
-        if (producer.type !== 'WEIBO_PERSONAL') {
-            continue;
-        }
-
         log(`开始处理 ${producer.name || producer.producerId}`, 'info');
-        const count = await processUserPosts(producer, maxPages);
+        const count = await processUserPost(producer, maxPages);
         totalProcessed += count;
         log(`处理完成，成功处理 ${count} 条微博`, 'info');
         await sleep(API_CONFIG.delayMs);

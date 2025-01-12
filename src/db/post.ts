@@ -5,12 +5,13 @@ export const createPost = async (data: {
     platform: Platform;
     userId: string;
     platformId: string;
+    producerId: string;
 }): Promise<Post> => {
     const postData = {
         userId: data.userId,
         platform: data.platform,
         platformId: data.platformId,
-        producerId: data.userId,
+        producerId: data.producerId,
         status: UploadStatus.PENDING
     };
     return await prisma.post.upsert({
@@ -22,7 +23,7 @@ export const createPost = async (data: {
         },
         update: {
             userId: data.userId,
-            producerId: data.userId
+            producerId: data.producerId
         },
         create: postData
     });

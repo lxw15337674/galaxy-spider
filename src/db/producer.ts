@@ -1,11 +1,13 @@
 'use server';
 
 import { prisma } from ".";
+import { ProducerType } from "@prisma/client";
 
-export const getProducers = async () => {
+export const getProducers = async (type: ProducerType) => {
   return await prisma.producer.findMany({
     where: {
-      deletedAt: null
+      deletedAt: null,
+      type: type
     },
     orderBy: {
       createTime: 'desc'

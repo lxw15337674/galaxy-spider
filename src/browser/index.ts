@@ -35,6 +35,13 @@ class BrowserManager {
             this.browser = null;
         }
     }
+
+    async closeBrowser() {
+        if (this.browser) {
+            await this.browser.close();
+            this.browser = null;
+        }
+    }
 }
 
 export const browserManager = new BrowserManager();
