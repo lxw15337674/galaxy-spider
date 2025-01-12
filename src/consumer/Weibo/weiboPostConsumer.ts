@@ -160,8 +160,8 @@ export const runWeiboPostConsumer = async () => {
                     originSrc: medias[index].originSrc,
                     userId: post.userId,
                     producerId: post.producerId,
-                    width: medias[index].width ? Number(medias[index].width) : null,
-                    height: medias[index].height ? Number(medias[index].height) : null,
+                    width: medias[index].width,
+                    height: medias[index].height,
                     status: UploadStatus.UPLOADED
                 })));
 

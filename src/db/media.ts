@@ -50,6 +50,8 @@ export const saveMedias = async (data: MediaData[]):Promise<number> => {
         const result = await prisma.media.createMany({
             data: newImages.map(img => ({
                 ...img,
+                width: Number(img?.width),
+                height: Number(img?.height),
                 status: UploadStatus.UPLOADED
             }))
         });

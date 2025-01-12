@@ -65,23 +65,6 @@ const processPost = async (post: WeiboMblog, producer: Producer): Promise<number
             userId: producer.producerId || '',
             producerId: producer.id
         });
-
-        // Then create media records if post was created successfully
-        if (createdPost && post.pics?.length) {
-            const medias = post.pics.map(pic => ({
-                width: pic.geo?.width || null,
-                height: pic.geo?.height || null,
-                originSrc: `https://m.weibo.cn/${producer.producerId}/${post.id}`,
-                originMediaUrl: pic.large?.url || pic.url,
-                galleryMediaUrl: null,
-                userId: producer.producerId || '',
-                producerId: producer.id,
-                postId: createdPost.id
-            }));
-
-            await saveMedias(medias);
-        }
-
         return createdPost ? 1 : 0;
     } catch (error) {
         log(`处理微博帖子失败: ${error}`, 'error');
