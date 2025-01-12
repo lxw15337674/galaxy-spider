@@ -4,7 +4,6 @@ import { sleep } from '../../utils';
 import type { WeiboMblog } from '../../types/weibo';
 import { log } from '../../utils/log';
 import { createPost } from '../../db/post';
-import { saveMedias } from '../../db/media';
 import type { PageResult } from './types';
 import { getProducers } from '../../db/producer';
 import { getProducerById } from '../../db/producer';

@@ -151,7 +151,7 @@ export const runWeiboPostConsumer = async () => {
                         console.log(`⚠️ 第 ${index + 1} 个媒体文件上传失败 (${successCount}/${mediaUrls.length})`);
                     }
                 }
-
+                
                 console.log(`💾 正在保存 ${results.length} 个媒体记录到数据库...`);
                 await saveMedias(results.map((url, index) => ({
                     galleryMediaUrl: url,
