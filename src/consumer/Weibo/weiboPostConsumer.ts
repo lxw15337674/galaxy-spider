@@ -92,7 +92,7 @@ export const getWeiboPost = async (id: string, page: Page) => {
         }
 
         const medias = extractMedias(renderData, postUrl);
-        return { medias };
+        return { medias, postUrl };
     } catch (error) {
         log(`数据获取失败: ${id}: ${error}`, 'error');
         return null;
@@ -128,7 +128,7 @@ export const runWeiboPostConsumer = async () => {
                     await updatePostStatus(post.id, UploadStatus.FAILED);
                     continue;
                 }
-                const { medias } = data;
+                const { medias, postUrl } = data;
                 log(`发现 ${medias.length} 个媒体文件需要处理`, 'info');
 
                 // 保存图片到gallery
@@ -168,7 +168,7 @@ export const runWeiboPostConsumer = async () => {
                 await updatePostStatus(post.id, UploadStatus.UPLOADED);
                 const postEndTime = new Date();
                 const postDuration = (postEndTime.getTime() - postStartTime.getTime()) / 1000;
-                log(`帖子处理完成，ID: ${post.id}，耗时: ${postDuration.toFixed(1)}秒`, 'success');
+                log(`帖子处理完成，源地址: ${postUrl}，耗时: ${postDuration.toFixed(1)}秒`, 'success');
             } catch (error) {
                 log(`处理帖子失败，ID: ${post.id}: ${error}`, 'error');
                 await updatePostStatus(post.id, UploadStatus.FAILED);
