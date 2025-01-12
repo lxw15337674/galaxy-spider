@@ -13,7 +13,6 @@ export const createPost = async (data: {
         producerId: data.userId,
         status: UploadStatus.PENDING
     };
-    console.log('postData', data.platform, data.platformId, data.userId);
     return await prisma.post.upsert({
         where: {
             platform_platformId: {
