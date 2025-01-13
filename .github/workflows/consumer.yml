@@ -1,4 +1,4 @@
-name:  Consumer
+name: Weibo Consumer
 
 on:
   schedule:
