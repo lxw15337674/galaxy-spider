@@ -1,8 +1,8 @@
 import axios from 'axios';
 import sharp from 'sharp';
-import { log } from '../log';
+import { log } from './log';
 import { Readable } from 'stream';
-import { retryRequest } from '../index';
+import { retryRequest } from './index';
 
 const GALLERY_URL = 'https://gallery233.pages.dev';
 const SUPPORTED_EXTENSIONS = {
@@ -121,7 +121,7 @@ export async function uploadToGallery(
 
         if (isImage(extension)) {
             try {
-                uploadBuffer = await sharp(uploadBuffer).avif({ quality: 80 }).toBuffer();
+                uploadBuffer = await sharp(uploadBuffer).avif({ quality: 70 }).toBuffer();
                 mimeType = 'image/avif';
                 fileName = fileName.replace(/\.[^.]+$/, '.avif');
             } catch (error) {
