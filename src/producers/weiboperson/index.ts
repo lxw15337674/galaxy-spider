@@ -26,7 +26,7 @@ function hasMedia(mblog: WeiboMblog): boolean {
     // 检查是否有视频
     const hasVideo =
         (mblog.page_info?.type === "video") ||
-        (mblog.pics?.some(pic => pic.type === "video") ?? false);
+        (mblog?.pics?.some(pic => pic?.type === "video") ?? false);
 
     return hasImages || hasVideo;
 }
