@@ -13,10 +13,10 @@ async function main() {
         
         await Promise.all([
             processWeiboTopic().then(() => {
-                log(`✅ 微博话题处理完成`, 'success');
+                log(`微博话题处理完成`, 'success');
             }),
             processWeiboPerson().then(() => {
-                log(`✅ 微博用户处理完成`, 'success');
+                log(`微博用户处理完成`, 'success');
             })
         ]);
         

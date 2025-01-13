@@ -51,12 +51,13 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
         log(`检测到lastPostTime，限制爬取页数为${API_CONFIG.postedMaxPages}页`, 'info');
     }
 
-    log(`开始处理话题 ${producer.producerId}`);
+    log(`开始处理话题 ${producer.name || producer.producerId}，计划获取 ${actualMaxPages} 页`, 'info');
     let totalProcessed = 0;
     let sinceId: number | undefined;
 
     for (let page = 0; page < actualMaxPages; page++) {
         try {
+            log(`[页面进度 ${page + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
             const response = await axios.get<WeiboTopicResponse>(API_CONFIG.baseUrl, {
                 params: {
                     containerid: producer.producerId,
@@ -65,29 +66,46 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
                 headers: API_CONFIG.headers
             });
 
-            if (!response.data.ok || !response.data.data.cards?.length) break;
+            if (!response.data.ok || !response.data.data.cards?.length) {
+                log(`[页面进度 ${page + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
+                break;
+            }
 
             sinceId = response.data.data.pageInfo.since_id;
             const validCards = extractType9Cards(response.data.data.cards);
 
-            if (!validCards.length) continue;
+            if (!validCards.length) {
+                log(`[页面进度 ${page + 1}/${actualMaxPages}] 未找到有效帖子，继续下一页`, 'info');
+                continue;
+            }
 
-            log(`正在处理第 ${page + 1} 页，共找到 ${validCards.length} 条帖子`);
+            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取成功，找到 ${validCards.length} 条帖子`, 'info');
 
-            for (const card of validCards) {
+            for (let i = 0; i < validCards.length; i++) {
+                const card = validCards[i];
                 const count = await processPost(card.mblog, producer);
+                if (count > 0) {
+                    log(`[页面进度 ${page + 1}/${actualMaxPages}][帖子进度 ${i + 1}/${validCards.length}] 成功处理帖子 ${card.mblog.id}`, 'info');
+                }
                 totalProcessed += count;
             }
 
-            await sleep(API_CONFIG.delayMs);
-            if (!sinceId) break;
+            if (!sinceId) {
+                log(`[页面进度 ${page + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
+                break;
+            }
+
+            if (page < actualMaxPages - 1) {
+                log(`等待 ${API_CONFIG.delayMs}ms 后获取下一页...`, 'info');
+                await sleep(API_CONFIG.delayMs);
+            }
         } catch (error) {
-            log(`获取话题页面失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
             break;
         }
     }
 
-    log(`话题 ${producer.producerId} 处理完成，共保存 ${totalProcessed} 张有图片的帖子`, 'success');
+    log(`话题 ${producer.name || producer.producerId} 处理完成，共处理 ${totalProcessed} 条帖子`, 'info');
     
     // 更新lastPostTime
     if (totalProcessed > 0) {
@@ -100,28 +118,27 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
 
 export const processWeiboTopic = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
     const producers = await getProducers(ProducerType.WEIBO_SUPER_TOPIC);
-    log(`共 ${producers.length} 个微博超话`, 'info');
+    log(`开始处理微博超话，共 ${producers.length} 个话题`, 'info');
+    
     try {
-        log('==== 开始获取微博话题帖子 ====');
         let totalCount = 0;
         
-        // 计算总任务数
-        const totalTopics = producers.length;
-        let completedTopics = 0;
-
-        for (const producer of producers) {
-            log(`\n👤 处理生产者: ${producer.name} (${producer.id})`);
+        for (let i = 0; i < producers.length; i++) {
+            const producer = producers[i];
+            log(`[总进度 ${i + 1}/${producers.length}] 开始处理话题 ${producer.name || producer.producerId}`, 'info');
+            
             const count = await processTopicPost(producer, maxPages);
             totalCount += count;
-            completedTopics++;
             
-            const remainingTopics = totalTopics - completedTopics;
-            if (remainingTopics > 0) {
-                log(`还剩 ${remainingTopics} 个话题待处理`);
+            log(`[总进度 ${i + 1}/${producers.length}] 话题处理完成，成功处理 ${count} 条帖子`, 'info');
+            
+            if (i < producers.length - 1) {
+                log(`等待 ${API_CONFIG.delayMs}ms 后处理下一个话题...`, 'info');
+                await sleep(API_CONFIG.delayMs);
             }
         }
 
-        log(`\n==== 微博话题帖子获取完成，共处理 ${totalCount} 张图片 ====`, 'success');
+        log(`所有话题处理完成，共处理 ${totalCount} 条帖子`, 'success');
         return totalCount;
     } catch (error) {
         log('微博话题处理失败: ' + error, 'error');

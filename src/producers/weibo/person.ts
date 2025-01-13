@@ -115,18 +115,19 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
     log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${actualMaxPages} 页`, 'info');
     for (let page = 0; page < actualMaxPages; page++) {
         try {
-            log(`正在获取第 ${page + 1} 页数据...`, 'info');
+            log(`[页面进度 ${page + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
             const { cards, sinceId: newSinceId } = await fetchPage(producer.producerId, containerId, sinceId);
-            log(`第 ${page + 1} 页获取成功，包含 ${cards.length} 条微博`, 'info');
+            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取成功，包含 ${cards.length} 条微博`, 'info');
             
             let pageProcessedCount = 0;
-            for (const card of cards) {
-                    const result = await processPost(card, producer);
-                    processedCount += result;
-                    pageProcessedCount += result;
-                    if (result) {
-                        log(`成功处理微博 ${card.id}`, 'info');
-                    }
+            for (let j = 0; j < cards.length; j++) {
+                const card = cards[j];
+                const result = await processPost(card, producer);
+                processedCount += result;
+                pageProcessedCount += result;
+                if (result) {
+                    log(`[页面进度 ${page + 1}/${actualMaxPages}][微博进度 ${j + 1}/${cards.length}] 成功处理微博 ${card.id}`, 'info');
+                }
             }
 
             if (!newSinceId) {
@@ -137,7 +138,7 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
             await sleep(API_CONFIG.delayMs);
 
         } catch (error) {
-            log(`获取第${page + 1}页失败: ${error}`, 'error');
+            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取失败: ${error}`, 'error');
             break;
         }
     }
@@ -156,15 +157,21 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
 export const processWeiboPerson = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
     let totalProcessed = 0;
     const producers = await getProducers(ProducerType.WEIBO_PERSONAL);
-    log(`共 ${producers.length} 个微博`, 'info');
+    log(`开始处理微博用户，共 ${producers.length} 个账号`, 'info');
+    
     for (let i = 0; i < producers.length; i++) {
         const producer = producers[i];
-        log(`[进度 ${i + 1}/${producers.length}] 开始处理 ${producer.name || producer.producerId}`, 'info');
+        log(`[总进度 ${i + 1}/${producers.length}] 开始处理用户 ${producer.name || producer.producerId}`, 'info');
         const count = await processUserPost(producer, maxPages);
         totalProcessed += count;
-        log(`[进度 ${i + 1}/${producers.length}] 处理完成，成功处理 ${count} 条微博`, 'info');
-        await sleep(API_CONFIG.delayMs);
+        log(`[总进度 ${i + 1}/${producers.length}] 用户处理完成，成功处理 ${count} 条微博`, 'info');
+        
+        if (i < producers.length - 1) {
+            log(`等待 ${API_CONFIG.delayMs}ms 后处理下一个用户...`, 'info');
+            await sleep(API_CONFIG.delayMs);
+        }
     }
 
+    log(`所有用户处理完成，共处理 ${totalProcessed} 条微博`, 'info');
     return totalProcessed;
 }; 
