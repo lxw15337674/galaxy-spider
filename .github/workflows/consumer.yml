@@ -1,4 +1,4 @@
-name:  consumer
+name:  Consumer
 
 on:
   schedule:
