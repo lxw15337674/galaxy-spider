@@ -52,7 +52,7 @@ function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
 export const getWeiboPost = async (id: string, page: Page) => {
     try {
         const postUrl = `https://m.weibo.cn/detail/${id}`;
-        await page.goto(postUrl, { waitUntil: 'networkidle' });
+        await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
         // 提取 $render_data
         const renderData = await page.evaluate(() => {
