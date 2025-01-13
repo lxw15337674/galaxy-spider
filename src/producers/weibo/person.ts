@@ -79,7 +79,7 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             producerId: producer.id,
             createTime: new Date(post.created_at)
         });
-        log(`创建帖子成功: ${createdPost.id}`, 'info');
+        log(`创建帖子成功: ${post.id}`, 'info');
         return createdPost ? 1 : 0;
     } catch (error) {
         log(`处理微博帖子失败: ${error}`, 'error');
