@@ -2,7 +2,7 @@ import { UploadStatus } from '@prisma/client';
 import { browserManager } from '../../browser';
 import { saveMedias } from '../../db/media';
 import { getPendingPost, updatePostStatus } from '../../db/post';
-import { uploadToGallery } from '../../utils/upload/upload';
+import { uploadToGallery } from '../../utils/upload';
 import { log } from '../../utils/log';
 import type { WeiboData } from './types';
 import type { Page } from 'playwright';

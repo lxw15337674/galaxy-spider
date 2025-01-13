@@ -1,5 +1,5 @@
-import { processWeiboPerson } from './producers/weiboperson';
-import { processWeiboTopic } from './producers/weiboTopic';
+import { processWeiboPerson } from './producers/weibo/person';
+import { processWeiboTopic } from './producers/weibo/topic';
 import { log } from './utils/log';
 import { formatDuration } from './utils/format';
 
@@ -15,9 +15,9 @@ async function main() {
             processWeiboTopic().then(() => {
                 log(`✅ 微博话题处理完成`, 'success');
             }),
-            processWeiboPerson().then(() => {
-                log(`✅ 微博用户处理完成`, 'success');
-            })
+            // processWeiboPerson().then(() => {
+            //     log(`✅ 微博用户处理完成`, 'success');
+            // })
         ]);
         
         const processEndTime = Date.now();

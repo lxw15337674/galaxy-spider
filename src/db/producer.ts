@@ -7,7 +7,10 @@ export const getProducers = async (type: ProducerType) => {
   return await prisma.producer.findMany({
     where: {
       deletedAt: null,
-      type: type
+      type: type,
+      producerId: {
+        not: null
+      }
     },
     orderBy: {
       createTime: 'desc'

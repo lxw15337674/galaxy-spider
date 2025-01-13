@@ -3,7 +3,8 @@ import { ProducerType, type Producer } from '@prisma/client';
 import { sleep } from '../../utils';
 import { log } from '../../utils/log';
 import { getProducers, updateProducerLastPostTime } from '../../db/producer';
-import { processPost } from '../weiboperson';
+import { processPost } from './person';
+import type { Card, WeiboTopicResponse } from './types';
 
 //Constants
 const API_CONFIG = {
@@ -16,7 +17,28 @@ const API_CONFIG = {
     postedMaxPages: 5
 } as const;
 
- 
+// 递归提取所有 card_type 为 9 的卡片
+function extractType9Cards(data: Card[]): Card[] {
+    const type9Cards: Card[] = [];
+
+    // Start processing directly with the input array
+    function processCards(cards: Card[]) {
+        cards.forEach(card => {
+            if (card.card_type === '9') {
+                type9Cards.push(card);
+            }
+
+            if (card.card_group && Array.isArray(card.card_group)) {
+                processCards(card.card_group);
+            }
+        });
+    }
+
+    // Process the input array directly
+    processCards(data);
+
+    return type9Cards;
+}
 export const processTopicPost = async (producer: Producer, maxPages: number): Promise<number> => {
     if (!producer.producerId) {
         log(`生产者 ${producer.name} 未找到话题ID，跳过`, 'warn');
@@ -31,11 +53,11 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
 
     log(`开始处理话题 ${producer.producerId}`);
     let totalProcessed = 0;
-    let sinceId: string | undefined;
+    let sinceId: number | undefined;
 
     for (let page = 0; page < actualMaxPages; page++) {
         try {
-            const response = await axios.get<any>(API_CONFIG.baseUrl, {
+            const response = await axios.get<WeiboTopicResponse>(API_CONFIG.baseUrl, {
                 params: {
                     containerid: producer.producerId,
                     ...(sinceId && { since_id: sinceId })
@@ -46,9 +68,7 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
             if (!response.data.ok || !response.data.data.cards?.length) break;
 
             sinceId = response.data.data.pageInfo.since_id;
-            const validCards = response.data.data.cards.filter((card: any) =>
-                card.card_type === '9' && card.mblog
-            );
+            const validCards = extractType9Cards(response.data.data.cards);
 
             if (!validCards.length) continue;
 

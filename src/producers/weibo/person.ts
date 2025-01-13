@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { type Producer, type Platform, ProducerType } from '@prisma/client';
 import { sleep } from '../../utils';
-import type { WeiboMblog } from '../../types/weibo';
+import type { WeiboMblog } from './types';
 import { log } from '../../utils/log';
 import { createPost } from '../../db/post';
 import type { PageResult } from './types';
@@ -93,7 +93,6 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
         return 0;
     }
 
-    // Verify producer exists in database
     const existingProducer = await getProducerById(producer.id);
     if (!existingProducer) {
         log(`Producer ${producer.id} not found in database`, 'error');
