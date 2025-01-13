@@ -177,6 +177,7 @@ enum UploadStatus {
   PENDING
   UPLOADED
   FAILED
+  PROCESSING
 }
 
 enum ProducerType {

@@ -15,7 +15,7 @@ class BrowserManager {
         return this.browser;
     }
 
-    async getPage(): Promise<Page> {
+    async createPage(): Promise<Page> {
         if (!this.page) {
             const browser = await this.getBrowser();
             this.context = await browser.newContext();

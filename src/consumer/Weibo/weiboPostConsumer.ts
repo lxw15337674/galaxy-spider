@@ -105,7 +105,7 @@ export const runWeiboPostConsumer = async () => {
     const startTime = new Date();
     
     try {
-        const page = await browserManager.getPage();
+        const page = await browserManager.createPage();
         log('浏览器页面初始化完成', 'success');
 
         while (true) {
@@ -128,9 +128,8 @@ export const runWeiboPostConsumer = async () => {
                     await updatePostStatus(post.id, UploadStatus.FAILED);
                     continue;
                 }
+                await updatePostStatus(post.id, UploadStatus.PROCESSING);
                 const { medias, postUrl } = data;
-                log(`发现 ${medias.length} 个媒体文件需要处理`, 'info');
-
                 // 保存图片到gallery
                 const mediaUrls = medias.map(media => media.originMediaUrl);
                 let successCount = 0;

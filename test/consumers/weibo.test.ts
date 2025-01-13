@@ -23,7 +23,7 @@ describe('Weibo Video Tests', () => {
     });
 
     it('should fetch media info successfully', async () => {
-        const page = await browserManager.getPage();
+        const page = await browserManager.createPage();
         // 测试运行
         const data = await getWeiboPost('5035378711202553', page);
         expect(data).toBeDefined();
@@ -31,7 +31,7 @@ describe('Weibo Video Tests', () => {
     });
 
     it('should verify media URL is accessible', async () => {
-        const page = await browserManager.getPage();
+        const page = await browserManager.createPage();
         const data = await getWeiboPost('5120079876328548', page);
         expect(data?.medias).toBeDefined();
         expect(data?.medias?.length).toBeGreaterThan(0);
