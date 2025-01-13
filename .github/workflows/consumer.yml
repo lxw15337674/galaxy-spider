@@ -1,4 +1,4 @@
-name:  Image Consumer
+name:  consumer
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:         # 支持手动触发
 
 jobs:
-  produce-images:
+  media-consumer:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
