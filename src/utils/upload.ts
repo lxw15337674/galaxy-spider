@@ -147,7 +147,7 @@ export async function uploadToGallery(
                         fit: 'inside',
                         withoutEnlargement: true
                     })
-                    .avif({ quality: 30 })
+                    .avif({ quality: 50 })
                     .toBuffer();
 
                 mimeType = 'image/avif';
