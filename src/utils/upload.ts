@@ -143,7 +143,11 @@ export async function uploadToGallery(
                     .toBuffer();
 
                 const thumbnailBuffer = await sharp(mediaBuffer)
-                    .avif({ quality: 20 })
+                    .resize(600, 600, {
+                        fit: 'inside',
+                        withoutEnlargement: true
+                    })
+                    .avif({ quality: 30 })
                     .toBuffer();
 
                 mimeType = 'image/avif';
