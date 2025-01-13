@@ -86,6 +86,7 @@ model Media {
   updateTime      DateTime     @default(now()) @updatedAt
   galleryMediaUrl String?
   originMediaUrl  String?
+  thumbnailUrl    String?    
   status          UploadStatus @default(PENDING)
   producerId      String?
   post            Post?        @relation("PostMedia", fields: [postId], references: [id])

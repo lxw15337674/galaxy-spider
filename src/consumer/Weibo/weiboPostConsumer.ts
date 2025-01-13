@@ -153,7 +153,8 @@ export const runWeiboPostConsumer = async () => {
                 const results = (await Promise.all(uploadPromises)).filter((url): url is string => url !== null);
                 
                 await saveMedias(results.map((url, index) => ({
-                    galleryMediaUrl: url,
+                    galleryMediaUrl: url.galleryUrl,
+                    thumbnailUrl: url.thumbnailUrl,
                     originMediaUrl: medias[index].originMediaUrl,
                     postId: post.id,
                     originSrc: medias[index].originSrc,
