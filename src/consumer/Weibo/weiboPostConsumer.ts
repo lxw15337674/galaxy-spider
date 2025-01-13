@@ -124,7 +124,6 @@ export const runWeiboPostConsumer = async () => {
                 const results: string[] = [];
                 const uploadPromises = mediaUrls.map(mediaUrl => 
                     uploadToGallery(mediaUrl, {
-                        Host: 'wx3.sinaimg.cn',
                         Referer: 'https://weibo.com/'
                     })
                 );
