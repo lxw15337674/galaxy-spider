@@ -22,7 +22,7 @@ export const updateMediaGalleryUrl = async (id:number,galleryMediaUrl:string,sta
     }
 }
 
-type MediaData = Omit<Media, 'id'|'status'|'createTime'|'updateTime'|'deletedAt'>
+type MediaData = Omit<Media, 'id'|'status'|'updateTime'|'deletedAt'>
 export const saveMedias = async (data: MediaData[]):Promise<number> => {
     try {
         if (!data?.length) {
@@ -50,6 +50,8 @@ export const saveMedias = async (data: MediaData[]):Promise<number> => {
         const result = await prisma.media.createMany({
             data: newImages.map(img => ({
                 ...img,
+                width: Number(img?.width),
+                height: Number(img?.height),
                 status: UploadStatus.UPLOADED
             }))
         });

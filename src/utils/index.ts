@@ -1,6 +1,6 @@
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const MAX_RETRY_ATTEMPTS = 2;
+const MAX_RETRY_ATTEMPTS = 3;
 
 
 
