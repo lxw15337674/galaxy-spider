@@ -168,7 +168,7 @@ export const runWeiboPostConsumer = async () => {
                 await updatePostStatus(post.id, UploadStatus.UPLOADED);
                 const postEndTime = new Date();
                 const postDuration = (postEndTime.getTime() - postStartTime.getTime()) / 1000;
-                log(`帖子处理完成，源地址: ${postUrl}，耗时: ${postDuration.toFixed(1)}秒`, 'success');
+                log(`帖子处理完成，源地址: ${postUrl} ，耗时: ${postDuration.toFixed(1)}秒`, 'success');
             } catch (error) {
                 log(`处理帖子失败，ID: ${post.id}: ${error}`, 'error');
                 await updatePostStatus(post.id, UploadStatus.FAILED);
