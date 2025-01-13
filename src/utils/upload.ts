@@ -171,8 +171,7 @@ export async function uploadToGallery(
                 const mainCompressionRatio = ((compressedSize / originalSize) * 100).toFixed(2);
                 const thumbnailCompressionRatio = ((thumbnailSize / originalSize) * 100).toFixed(2);
                 
-                log(`压缩成功 [${url}] → [${galleryUrl}]->[${thumbnailUrl}] - 主图: (${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}, ${mainCompressionRatio}%), 缩略图: (${formatFileSize(originalSize)} → ${formatFileSize(thumbnailSize)}, ${thumbnailCompressionRatio}%)${thumbnailUrl ? ` → [${thumbnailUrl}]` : ''}`, 'success');
-
+                log(`压缩成功 [${url}] → [${galleryUrl}]->[${thumbnailUrl}] - 主图: (${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}, ${mainCompressionRatio}%), 缩略图: (${formatFileSize(originalSize)} → ${formatFileSize(thumbnailSize)}, ${thumbnailCompressionRatio}%)`, 'success');
                 return { galleryUrl, thumbnailUrl };
             } catch (error) {
                 log(`AVIF转换失败: ${error}`, 'error');
