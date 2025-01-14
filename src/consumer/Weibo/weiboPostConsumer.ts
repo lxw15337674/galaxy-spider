@@ -134,24 +134,24 @@ export const runWeiboPostConsumer = async () => {
                 const mediaUrls = medias.map(media => media.originMediaUrl);
                 let successCount = 0;
                 
-                // Concurrent upload
-                log(`开始并发上传 ${mediaUrls.length} 个媒体文件到图库...`, 'info');
-                const uploadPromises = mediaUrls.map((mediaUrl, index) => 
-                    uploadToGallery(mediaUrl, {
-                        Referer: 'https://weibo.com/'
-                    }).then(result => {
-                        if (result !== null) {
-                            successCount++;
-                            log(`第 ${index + 1} 个媒体文件上传成功 (${successCount}/${mediaUrls.length})`, 'success');
-                        } else {
-                            log(`第 ${index + 1} 个媒体文件上传失败 (${successCount}/${mediaUrls.length})`, 'warn');
-                        }
-                        return result;
-                    })
-                );
+                // 开始串行上传
+                log(`开始串行上传 ${mediaUrls.length} 个媒体文件到图库...`, 'info');
+                const results = [];
 
-                const results = (await Promise.all(uploadPromises)).filter((url): url is string => url !== null);
-                
+                for (const [index, mediaUrl] of mediaUrls.entries()) {
+                    const result = await uploadToGallery(mediaUrl, {
+                        Referer: 'https://weibo.com/'
+                    });
+                    
+                    if (result !== null) {
+                        successCount++;
+                        results.push(result);
+                        log(`第 ${index + 1} 个媒体文件上传成功 (${successCount}/${mediaUrls.length})`, 'success');
+                    } else {
+                        log(`第 ${index + 1} 个媒体文件上传失败 (${successCount}/${mediaUrls.length})`, 'warn');
+                    }
+                }
+
                 await saveMedias(results.map((url, index) => ({
                     galleryMediaUrl: url.galleryUrl,
                     thumbnailUrl: url.thumbnailUrl,
