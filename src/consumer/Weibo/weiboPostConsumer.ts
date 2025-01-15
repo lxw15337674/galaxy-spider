@@ -20,7 +20,7 @@ function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
 
     if (data.status && data.status.pics) {
         data.status.pics.forEach(async (pic) => {
-            if (pic.type === "video" && pic.videoSrc) {
+            if (pic.videoSrc) {
                 medias.push({
                     width: pic.geo?.width || null,
                     height: pic.geo?.height || null,

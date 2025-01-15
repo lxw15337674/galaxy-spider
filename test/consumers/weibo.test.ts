@@ -32,7 +32,7 @@ describe('Weibo Video Tests', () => {
 
     it('should verify media URL is accessible', async () => {
         const page = await browserManager.createPage();
-        const data = await getWeiboPost('5120079876328548', page);
+        const data = await getWeiboPost('5122725914609327', page);
         expect(data?.medias).toBeDefined();
         expect(data?.medias?.length).toBeGreaterThan(0);
 
@@ -59,23 +59,14 @@ describe('Weibo Video Tests', () => {
         }
     });
     
-    // it('should download all media files successfully', async () => {
-    //     const data = await getWeiboPost('5120079876328548');
-    //     expect(data?.medias).toBeDefined();
-    //     expect(data?.medias?.length).toBeGreaterThan(0);
 
-    //     if (data?.medias && data.medias.length > 0) {
-    //         // 验证所有媒体URL都可下载
-    //         for (const media of data.medias) {
-    //             const mediaUrl = media.originMediaUrl;
-    //             const fileName = path.basename(mediaUrl.split('?')[0]); // 去除URL参数
-    //             const filePath = path.join(testOutputDir, fileName);
-                
-    //             await downloadVideo(mediaUrl, fileName);
-    //         }
-    //     }
-    //     expect(true).toBe(true);
+    // it('should download all media files successfully', async () => {
+    //     const mediaUrl = media.originMediaUrl;
+    //     const { galleryUrl, thumbnailUrl } = await uploadToGallery(mediaUrl);
+    //     expect(galleryUrl).toBeDefined();
+    //     expect(thumbnailUrl).toBeDefined();
     // });
+
 
     afterEach(() => {
         browserManager.closeBrowser();
