@@ -18,6 +18,33 @@ interface MediaInfo {
 function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
     const medias: MediaInfo[] = [];
 
+    // 处理视频信息
+    if (data.status?.page_info?.type === 'video') {
+        const video = data.status.page_info;
+        data.status.pics = data.status.pics || [];
+        data.status.pics.push({
+            pid: video.page_pic?.pid || '',
+            url: video.page_pic?.url || '',
+            size: 'video',
+            geo: {
+                width: parseInt(video.page_pic?.width) || 0,
+                height: parseInt(video.page_pic?.height) || 0,
+                croped: false
+            },
+            large: {
+                size: 'video',
+                url: video.page_pic?.url || '',
+                geo: {
+                    width: parseInt(video.page_pic?.width) || 0,
+                    height: parseInt(video.page_pic?.height) || 0,
+                    croped: false
+                }
+            },
+            type: 'video',
+            videoSrc: video.media_info?.stream_url_hd || video.media_info?.stream_url || Object.values(video.urls || {})[0]
+        });
+    }
+
     if (data.status && data.status.pics) {
         data.status.pics.forEach(async (pic) => {
             if (pic.videoSrc) {
@@ -57,32 +84,6 @@ export const getWeiboPost = async (id: string, page: Page) => {
         // 提取 $render_data
         const renderData = await page.evaluate(() => {
             const data = (window as any).$render_data as WeiboData;
-            // 处理视频信息
-            if (data.status.page_info?.type === 'video') {
-                const video = data.status.page_info;
-                data.status.pics = data.status.pics || [];
-                data.status.pics.push({
-                    pid: video.page_pic?.pid || '',
-                    url: video.page_pic?.url || '',
-                    size: 'video',
-                    geo: {
-                        width: parseInt(video.page_pic?.width) || 0,
-                        height: parseInt(video.page_pic?.height) || 0,
-                        croped: false
-                    },
-                    large: {
-                        size: 'video',
-                        url: video.page_pic?.url || '',
-                        geo: {
-                            width: parseInt(video.page_pic?.width) || 0,
-                            height: parseInt(video.page_pic?.height) || 0,
-                            croped: false
-                        }
-                    },
-                    type: 'video',
-                    videoSrc: video.media_info?.stream_url_hd || video.media_info?.stream_url || Object.values(video.urls ||{})[0]
-                });
-            }
             return data;
         });
 

@@ -15,22 +15,53 @@ describe('Weibo Video Tests', () => {
         }
     });
 
-    it('1+1=2', () => {
+    it('应该正确设置测试环境', () => {
         expect(1 + 1).toBe(2);
     });
-    it('should run weibo post consumer', async () => {
+
+    it('应该能正常执行微博帖子消费者', async () => {
         await runWeiboPostConsumer();
     });
 
-    it('should fetch media info successfully', async () => {
+    it('应该能成功获取指定微博帖子的复合媒体信息', async () => {
         const page = await browserManager.createPage();
         // 测试运行
         const data = await getWeiboPost('5035378711202553', page);
-        expect(data).toBeDefined();
-        expect(Array.isArray(data?.medias)).toBe(true);
+        expect(data?.medias).toBeDefined();
+        expect(data?.medias?.length).toBeGreaterThan(0);
+
+        if (data?.medias && data.medias.length > 0) {
+            // 验证所有媒体URL都可访问
+            for (const media of data.medias) {
+                const result = await uploadToGallery(media.originMediaUrl, {
+                    Referer: 'https://weibo.com/'
+                });
+                expect(result).toBeDefined();
+            }
+        }
     });
 
-    it('should verify media URL is accessible', async () => {
+    // 5120079876328548,单个视频
+    it('应该能成功获取指定微博帖子的视频媒体信息', async () => {
+        const page = await browserManager.createPage();
+        const data = await getWeiboPost('5120079876328548', page);
+        expect(data?.medias).toBeDefined();
+        expect(data?.medias?.length).toBeGreaterThan(0);
+
+        if (data?.medias && data.medias.length > 0) {
+            // 验证所有媒体URL都可访问
+            for (const media of data.medias) {
+                const result = await uploadToGallery(media.originMediaUrl, {
+                    Referer: 'https://weibo.com/'
+                });
+                expect(result).toBeDefined();
+            }
+        }
+    });
+
+
+
+    it('应该能成功将livePhoto微博媒体上传到图库', async () => {
         const page = await browserManager.createPage();
         const data = await getWeiboPost('5118093107403364', page);
         expect(data?.medias).toBeDefined();
