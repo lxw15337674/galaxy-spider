@@ -2,7 +2,7 @@ name: Weibo  Producer
 
 on:
   schedule:
-    - cron: '0 */12 * * *'  # 每12小时运行一次
+    - cron: '0 */6 * * *'  # 每6小时运行一次
   workflow_dispatch:         # 支持手动触发
 
 jobs:
