@@ -4,6 +4,7 @@ import { getWeiboPost, runWeiboPostConsumer } from "../../src/consumer/Weibo/wei
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import { uploadToGallery } from "../../src/utils/upload";
 
 describe('Weibo Video Tests', () => {
     const testOutputDir = path.join(__dirname, 'test-output');
@@ -32,29 +33,17 @@ describe('Weibo Video Tests', () => {
 
     it('should verify media URL is accessible', async () => {
         const page = await browserManager.createPage();
-        const data = await getWeiboPost('5122725914609327', page);
+        const data = await getWeiboPost('5118093107403364', page);
         expect(data?.medias).toBeDefined();
         expect(data?.medias?.length).toBeGreaterThan(0);
 
         if (data?.medias && data.medias.length > 0) {
             // 验证所有媒体URL都可访问
             for (const media of data.medias) {
-                const mediaUrl = media.originMediaUrl;
-                
-                // 发送 GET 请求并设置 stream 模式
-                const response = await axios({
-                    method: 'get',
-                    url: mediaUrl,
-                    responseType: 'stream',
-                    // 取消请求超时
-                    timeout: 0
+                const result = await uploadToGallery(media.originMediaUrl, {
+                    Referer: 'https://weibo.com/'
                 });
-                
-                // 立即取消请求，我们只需要验证可访问性
-                response.data.destroy();
-                
-                // 验证响应状态码是 200
-                expect(response.status).toBe(200);
+                expect(result).toBeDefined();
             }
         }
     });

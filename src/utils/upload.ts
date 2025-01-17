@@ -79,7 +79,7 @@ async function uploadToGalleryServer(
 
 const getFileExtension = (url: string): string => {
     try {
-        return new URL(url).pathname.split('.').pop()?.toLowerCase() || '';
+        return url.split('.').pop()?.toLowerCase() || '';
     } catch {
         return url.split('.').pop()?.split(/[?#]/)[0]?.toLowerCase() || '';
     }
