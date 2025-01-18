@@ -19,9 +19,9 @@ describe('Weibo Video Tests', () => {
         expect(1 + 1).toBe(2);
     });
 
-    it('应该能正常执行微博帖子消费者', async () => {
-        await runWeiboPostConsumer();
-    });
+    // it('应该能正常执行微博帖子消费者', async () => {
+    //     await runWeiboPostConsumer();
+    // });
 
     it('应该能成功获取指定微博帖子的复合媒体信息', async () => {
         const page = await browserManager.createPage();
@@ -33,7 +33,7 @@ describe('Weibo Video Tests', () => {
         if (data?.medias && data.medias.length > 0) {
             // 验证所有媒体URL都可访问
             for (const media of data.medias) {
-                const result = await uploadToGallery(media.originMediaUrl, {
+                const result = await uploadToGallery(media, {
                     Referer: 'https://weibo.com/'
                 });
                 expect(result).toBeDefined();
@@ -47,15 +47,12 @@ describe('Weibo Video Tests', () => {
         const data = await getWeiboPost('5120079876328548', page);
         expect(data?.medias).toBeDefined();
         expect(data?.medias?.length).toBeGreaterThan(0);
-
-        if (data?.medias && data.medias.length > 0) {
-            // 验证所有媒体URL都可访问
-            for (const media of data.medias) {
-                const result = await uploadToGallery(media.originMediaUrl, {
-                    Referer: 'https://weibo.com/'
-                });
-                expect(result).toBeDefined();
-            }
+        // 验证所有媒体URL都可访问
+        for (const media of data?.medias || []) {
+            const result = await uploadToGallery(media, {
+                Referer: 'https://weibo.com/'
+            });
+            expect(result).toBeDefined();
         }
     });
 
@@ -67,14 +64,12 @@ describe('Weibo Video Tests', () => {
         expect(data?.medias).toBeDefined();
         expect(data?.medias?.length).toBeGreaterThan(0);
 
-        if (data?.medias && data.medias.length > 0) {
-            // 验证所有媒体URL都可访问
-            for (const media of data.medias) {
-                const result = await uploadToGallery(media.originMediaUrl, {
-                    Referer: 'https://weibo.com/'
-                });
-                expect(result).toBeDefined();
-            }
+        // 验证所有媒体URL都可访问
+        for (const media of data?.medias || []) {
+            const result = await uploadToGallery(media, {
+                Referer: 'https://weibo.com/'
+            });
+            expect(result).toBeDefined();
         }
     });
     

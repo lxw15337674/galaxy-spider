@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { log } from './log';
 import { Readable } from 'stream';
 import { retryRequest } from './index';
+import type { MediaInfo } from '../consumer/Weibo/types';
 
 const GALLERY_URL = 'https://gallery233.pages.dev';
 const SUPPORTED_EXTENSIONS = {
@@ -77,13 +78,30 @@ async function uploadToGalleryServer(
     }
 }
 
-const getFileExtension = (url: string): string => {
+export function getFileExtension(url: string): string {
     try {
-        return url.split('.').pop()?.toLowerCase() || '';
+        // Try to parse as URL first
+        const urlObj = new URL(url);
+
+        // Check if there's a livephoto parameter (specific to weibo URLs)
+        const livephoto = urlObj.searchParams.get('livephoto');
+        if (livephoto) {
+            // If livephoto parameter exists, extract extension from it
+            return getFileExtension(decodeURIComponent(livephoto));
+        }
+
+        // Get the last segment of the path
+        const filename = urlObj.pathname.split('/').pop() || '';
+
+        // Extract extension
+        const extension = filename.split('.').pop() || '';
+        return extension;
     } catch {
-        return url.split('.').pop()?.split(/[?#]/)[0]?.toLowerCase() || '';
+        // If URL parsing fails, treat as filename
+        const parts = url.split('.');
+        return parts.length > 1 ? parts.pop() || '' : '';
     }
-};
+}
 
 export const getFileName = (url: string): string => {
     try {
@@ -120,78 +138,87 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 }
 
 export async function uploadToGallery(
-    url: string, 
+    media: MediaInfo, 
     headers: Record<string, string> = {}
 ): Promise<MediaUploadResult> {
     try {
-        const extension = getFileExtension(url);
+        const extension = getFileExtension(media.originMediaUrl);
         if (!isImage(extension) && !isVideo(extension)) {
-            log(`不支持的文件类型: ${url}`, 'warn');
+            log(`不支持的文件类型: ${media.originMediaUrl}`, 'warn');
             return { galleryUrl: null, thumbnailUrl: null };
         }
 
         const isVideoFile = isVideo(extension);
-        const mediaBuffer = await downloadMedia(url, headers, isVideoFile);
+        const mediaBuffer = await downloadMedia(media.originMediaUrl, headers, isVideoFile);
         if (!mediaBuffer) {
+            log(`下载媒体文件失败: ${media.originMediaUrl}`, 'error');
             return { galleryUrl: null, thumbnailUrl: null };
         }
 
-        let mimeType = SUPPORTED_EXTENSIONS[extension as SupportedExtension] || 'application/octet-stream';
-        let fileName = getFileName(url);
         const originalSize = mediaBuffer.length;
+        let fileName = getFileName(media.originMediaUrl)
 
         if (isImage(extension)) {
             try {
+                // 处理主图
                 const mainBuffer = await sharp(mediaBuffer)
                     .avif({ quality: 80 })
                     .toBuffer();
-
-                const thumbnailBuffer = await sharp(mediaBuffer)
-                    .resize(600, 600, {
-                        fit: 'inside',
-                        withoutEnlargement: true
-                    })
-                    .avif({ quality: 80 })
-                    .toBuffer();
-
-                mimeType = 'image/avif';
-                fileName = fileName.replace(/\.[^.]+$/, '.avif');
                 
-                // Upload main file
-                const galleryUrl = await uploadToGalleryServer(mainBuffer, fileName, mimeType, false);
+                const mainFileName = `${fileName}.avif`;
+                const galleryUrl = await uploadToGalleryServer(mainBuffer, mainFileName, 'image/avif', false);
                 if (!galleryUrl) {
+                    log(`上传主图失败: ${media.originMediaUrl}`, 'error');
                     return { galleryUrl: null, thumbnailUrl: null };
                 }
-                
-                // Upload thumbnail if available
+
+                // 处理缩略图
                 let thumbnailUrl: string | null = null;
-                if (thumbnailBuffer) {
-                    thumbnailUrl = await uploadToGalleryServer(thumbnailBuffer, fileName, mimeType, true);
+                let convertedThumbnail: Buffer | null = null;
+                if (media.thumbnailUrl) {
+                    const thumbnailBuffer = await downloadMedia(media.thumbnailUrl, headers, false);
+                    if (thumbnailBuffer) {
+                        convertedThumbnail = await sharp(thumbnailBuffer)
+                            .avif({ quality: 80 })
+                            .toBuffer();
+                        
+                        const thumbFileName = `${fileName}_thumb.avif`;
+                        thumbnailUrl = await uploadToGalleryServer(convertedThumbnail, thumbFileName, 'image/avif', true);
+                        
+                        if (!thumbnailUrl) {
+                            log(`上传缩略图失败: ${media.thumbnailUrl}`, 'warn');
+                        }
+                    }
                 }
 
-                // Show compression statistics with URLs
+                // 统计压缩信息
                 const compressedSize = mainBuffer.length;
-                const thumbnailSize = thumbnailBuffer.length;
+                const thumbnailSize = convertedThumbnail?.length || 0;
                 const mainCompressionRatio = ((compressedSize / originalSize) * 100).toFixed(2);
-                const thumbnailCompressionRatio = ((thumbnailSize / originalSize) * 100).toFixed(2);
+                const thumbnailCompressionRatio = thumbnailSize ? ((thumbnailSize / originalSize) * 100).toFixed(2) : "0";
                 
-                log(`压缩成功 [${url}] → [${galleryUrl}]->[${thumbnailUrl}] - 主图: (${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}, ${mainCompressionRatio}%), 缩略图: (${formatFileSize(originalSize)} → ${formatFileSize(thumbnailSize)}, ${thumbnailCompressionRatio}%)`, 'success');
+                log(`处理成功 [${media.originMediaUrl}]\n  主图: ${galleryUrl} (${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}, ${mainCompressionRatio}%)\n  缩略图: ${thumbnailUrl || '无'} ${thumbnailSize ? `(${formatFileSize(thumbnailSize)}, ${thumbnailCompressionRatio}%)` : ''}`, 'success');
                 return { galleryUrl, thumbnailUrl };
             } catch (error) {
-                log(`AVIF转换失败: ${error}`, 'error');
+                log(`处理图片失败: ${media.originMediaUrl}, ${error}`, 'error');
                 return { galleryUrl: null, thumbnailUrl: null };
             }
         }
 
-        // For video files
-        log(`开始上传视频 [${url}] (${formatFileSize(originalSize)})`, 'info');
-        const galleryUrl = await uploadToGalleryServer(mediaBuffer, fileName, mimeType, false);
+        // 处理视频文件
+        const videoFileName = `${fileName}.${extension}`;
+        log(`开始上传视频 [${media.originMediaUrl}] (${formatFileSize(originalSize)})`, 'info');
+        const galleryUrl = await uploadToGalleryServer(mediaBuffer, videoFileName, SUPPORTED_EXTENSIONS[extension as SupportedExtension], false);
+        
         if (galleryUrl) {
-            log(`视频上传成功 [${url}] → [${galleryUrl}] (${formatFileSize(originalSize)})`, 'success');
+            log(`视频上传成功: ${galleryUrl} (${formatFileSize(originalSize)})`, 'success');
+        } else {
+            log(`视频上传失败: ${media.originMediaUrl}`, 'error');
         }
+        
         return { galleryUrl, thumbnailUrl: null };
     } catch (error) {
-        log(`上传失败: ${url}, ${error}`, 'error');
+        log(`处理失败: ${media.originMediaUrl}, ${error}`, 'error');
         return { galleryUrl: null, thumbnailUrl: null };
     }
 }

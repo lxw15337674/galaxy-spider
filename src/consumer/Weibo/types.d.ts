@@ -24,11 +24,6 @@ export interface WeiboUser {
     statuses_count: number;
 }
 
-export interface MediaInfo {
-    stream_url?: string;
-    stream_url_hd?: string;
-    duration?: number;
-}
 
 export interface PagePic {
     width: string;
@@ -53,7 +48,10 @@ export interface PageInfo {
     content2: string;
     video_orientation: string;
     play_count: string;
-    media_info: MediaInfo;
+    media_info: {
+        stream_url_hd: string;
+        stream_url: string;
+    };
     urls?: {
         mp4_hd_mp4?: string;
         mp4_ld_mp4?: string;
@@ -134,4 +132,15 @@ export interface WeiboData {
     third_scheme?: string;
     status: Status;
     call?: number;
+}
+
+
+
+export interface MediaInfo {
+    width: number | null;
+    height: number | null;
+    originMediaUrl: string;
+    originSrc: string;
+    thumbnailUrl: string | null;
+    type: 'image' | 'video';
 }

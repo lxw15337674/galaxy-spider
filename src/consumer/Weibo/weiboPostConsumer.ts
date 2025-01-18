@@ -4,16 +4,9 @@ import { saveMedias } from '../../db/media';
 import { getPendingPost, updatePostStatus } from '../../db/post';
 import { uploadToGallery } from '../../utils/upload';
 import { log } from '../../utils/log';
-import type { WeiboData } from './types';
+import type {   MediaInfo, WeiboData } from './types';
 import type { Page } from 'playwright';
 
-interface MediaInfo {
-    width: number | null;
-    height: number | null;
-    originMediaUrl: string;
-    originSrc: string;
-    type: 'image' | 'video';
-}
 
 function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
     const medias: MediaInfo[] = [];
@@ -52,6 +45,7 @@ function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
                     width: pic.geo?.width || null,
                     height: pic.geo?.height || null,
                     originMediaUrl: pic.videoSrc,
+                    thumbnailUrl: pic.url || null,
                     originSrc: postUrl,
                     type: 'video'
                 });
@@ -61,6 +55,7 @@ function extractMedias(data: WeiboData, postUrl: string): MediaInfo[] {
                     width: (pic.large?.geo?.width || pic.geo?.width || null) as number | null,
                     height: (pic.large?.geo?.height || pic.geo?.height || null) as number | null,
                     originMediaUrl: imageUrl,
+                    thumbnailUrl: imageUrl,
                     originSrc: postUrl,
                     type: 'image'
                 });
@@ -132,24 +127,23 @@ export const runWeiboPostConsumer = async () => {
                 await updatePostStatus(post.id, UploadStatus.PROCESSING);
                 const { medias, postUrl } = data;
                 // 保存图片到gallery
-                const mediaUrls = medias.map(media => media.originMediaUrl);
                 let successCount = 0;
                 
                 // 开始串行上传
-                log(`开始串行上传 ${mediaUrls.length} 个媒体文件到图库...`, 'info');
+                log(`开始串行上传 ${medias.length} 个媒体文件到图库...`, 'info');
                 const results = [];
 
-                for (const [index, mediaUrl] of mediaUrls.entries()) {
-                    const result = await uploadToGallery(mediaUrl, {
+                for (const [index, media] of medias.entries()) {
+                    const result = await uploadToGallery(media, {
                         Referer: 'https://weibo.com/'
                     });
                     
                     if (result !== null) {
                         successCount++;
                         results.push(result);
-                        log(`第 ${index + 1} 个媒体文件上传成功 (${successCount}/${mediaUrls.length})`, 'success');
+                        log(`第 ${index + 1} 个媒体文件上传成功 (${successCount}/${medias.length})`, 'success');
                     } else {
-                        log(`第 ${index + 1} 个媒体文件上传失败 (${successCount}/${mediaUrls.length})`, 'warn');
+                        log(`第 ${index + 1} 个媒体文件上传失败 (${successCount}/${medias.length})`, 'warn');
                     }
                 }
 
