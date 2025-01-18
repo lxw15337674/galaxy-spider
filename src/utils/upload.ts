@@ -87,8 +87,7 @@ const getFileExtension = (url: string): string => {
 
 const getFileName = (url: string): string => {
     try {
-        const pathname = new URL(url).pathname;
-        return pathname.split('/').pop() || `file.${getFileExtension(url)}`;
+        return   url.split('.').pop() || '';    
     } catch {
         return url.split('/').pop()?.split(/[?#]/)[0] || `file.${getFileExtension(url)}`;
     }
