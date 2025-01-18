@@ -207,16 +207,37 @@ export async function uploadToGallery(
 
         // 处理视频文件
         const videoFileName = `${fileName}.${extension}`;
+
         log(`开始上传视频 [${media.originMediaUrl}] (${formatFileSize(originalSize)})`, 'info');
         const galleryUrl = await uploadToGalleryServer(mediaBuffer, videoFileName, SUPPORTED_EXTENSIONS[extension as SupportedExtension], false);
         
+        // 处理视频缩略图
+        let thumbnailUrl: string | null = null;
+        if (media.thumbnailUrl) {
+            const thumbnailBuffer = await downloadMedia(media.thumbnailUrl, headers, false);
+            if (thumbnailBuffer) {
+                const convertedThumbnail = await sharp(thumbnailBuffer)
+                    .avif({ quality: 80 })
+                    .toBuffer();
+                
+                const thumbFileName = `${fileName}_thumb.avif`;
+                thumbnailUrl = await uploadToGalleryServer(convertedThumbnail, thumbFileName, 'image/avif', true);
+                
+                if (thumbnailUrl) {
+                    log(`视频缩略图上传成功: ${thumbnailUrl}`, 'success');
+                } else {
+                    log(`视频缩略图上传失败: ${media.thumbnailUrl}`, 'warn');
+                }
+            }
+        }
+
         if (galleryUrl) {
             log(`视频上传成功: ${galleryUrl} (${formatFileSize(originalSize)})`, 'success');
         } else {
             log(`视频上传失败: ${media.originMediaUrl}`, 'error');
         }
         
-        return { galleryUrl, thumbnailUrl: null };
+        return { galleryUrl, thumbnailUrl };
     } catch (error) {
         log(`处理失败: ${media.originMediaUrl}, ${error}`, 'error');
         return { galleryUrl: null, thumbnailUrl: null };
