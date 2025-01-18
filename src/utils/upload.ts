@@ -85,9 +85,14 @@ const getFileExtension = (url: string): string => {
     }
 };
 
-const getFileName = (url: string): string => {
+export const getFileName = (url: string): string => {
     try {
-        return   url.split('.').pop() || '';    
+        const ext = url.split('.').pop() || '';    
+        if (SUPPORTED_EXTENSIONS[ext as SupportedExtension]) {
+            return ext
+        }else{
+            return new URL(url).pathname.split('.').pop()?.toLowerCase() || ''; 
+        }
     } catch {
         return url.split('/').pop()?.split(/[?#]/)[0] || `file.${getFileExtension(url)}`;
     }
