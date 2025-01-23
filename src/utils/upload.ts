@@ -102,8 +102,6 @@ export function getFileExtension(url: string): string {
         return parts.length > 1 ? parts.pop() || '' : '';
     }
 }
- ${
-    Date.now()
 
 const isImage = (ext: string): ext is SupportedExtension => 
     ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
