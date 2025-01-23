@@ -102,19 +102,8 @@ export function getFileExtension(url: string): string {
         return parts.length > 1 ? parts.pop() || '' : '';
     }
 }
-
-export const getFileName = (url: string): string => {
-    try {
-        const ext = url.split('.').pop() || '';    
-        if (SUPPORTED_EXTENSIONS[ext as SupportedExtension]) {
-            return ext
-        }else{
-            return new URL(url).pathname.split('.').pop()?.toLowerCase() || ''; 
-        }
-    } catch {
-        return url.split('/').pop()?.split(/[?#]/)[0] || `file.${getFileExtension(url)}`;
-    }
-};
+ ${
+    Date.now()
 
 const isImage = (ext: string): ext is SupportedExtension => 
     ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
@@ -207,7 +196,7 @@ export async function uploadToGallery(
         }
 
         const originalSize = mediaBuffer.length;
-        const fileName = getFileName(media.originMediaUrl);
+        const fileName = Date.now() + '.' + extension;
 
         let processedMedia: ProcessedMedia;
         if (isImage(extension)) {
@@ -221,7 +210,7 @@ export async function uploadToGallery(
             processedMedia = {
                 buffer: mediaBuffer,
                 mimeType: SUPPORTED_EXTENSIONS[extension as SupportedExtension],
-                fileName: `${fileName}.${extension}`,
+                fileName,
                 size: mediaBuffer.length
             };
             log(`开始上传视频 [${media.originMediaUrl}] (${formatFileSize(originalSize)})`, 'info');

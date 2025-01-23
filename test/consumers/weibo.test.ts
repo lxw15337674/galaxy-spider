@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { browserManager } from "../../src/browser";
-import { getWeiboPost, runWeiboPostConsumer } from "../../src/consumer/Weibo/weiboPostConsumer";
+import { getWeiboPost } from "../../src/consumer/Weibo/weiboPostConsumer";
 import * as fs from 'fs';
 import * as path from 'path';
 import { uploadToGallery } from "../../src/utils/upload";

@@ -1,5 +1,5 @@
 import { expect, it,describe } from 'vitest';
-import { getFileExtension, getFileName } from '../../src/utils/upload';
+import { getFileExtension } from '../../src/utils/upload';
 
 describe('getFileExtension', () => {
     it('should return extension for supported file types', () => {
