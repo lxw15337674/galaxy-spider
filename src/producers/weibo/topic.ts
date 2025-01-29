@@ -12,7 +12,7 @@ const API_CONFIG = {
     headers: {
         "accept": "application/json, text/plain, */*",
     },
-    delayMs: 5000,
+    delayMs: 3000,
     defaultMaxPages: 20,
     postedMaxPages: 5
 } as const;

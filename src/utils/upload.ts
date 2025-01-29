@@ -144,16 +144,30 @@ async function processImage(buffer: Buffer, fileName: string): Promise<Processed
     };
 }
 
-async function processThumbnail(url: string, fileName: string, headers: Record<string, string>): Promise<string | null> {
+interface ThumbnailResult {
+    url: string | null;
+    size?: number;
+}
+
+async function processThumbnail(
+    url: string, 
+    fileName: string, 
+    headers: Record<string, string>
+): Promise<ThumbnailResult> {
     const thumbnailBuffer = await downloadMedia(url, headers, false);
-    if (!thumbnailBuffer) return null;
+    if (!thumbnailBuffer) return { url: null };
 
     const processed = await sharp(thumbnailBuffer)
-        .avif({ quality: 80 })
+        .avif({ quality: 40 })
         .toBuffer();
     
     const thumbFileName = `${fileName}_thumb.avif`;
-    return await uploadToGalleryServer(processed, thumbFileName, 'image/avif', true);
+    const thumbUrl = await uploadToGalleryServer(processed, thumbFileName, 'image/avif', true);
+    
+    return {
+        url: thumbUrl,
+        size: processed.length
+    };
 }
 
 async function logUploadStats(
@@ -164,13 +178,15 @@ async function logUploadStats(
     thumbnailUrl: string | null,
     thumbnailSize?: number
 ) {
-    const mainCompressionRatio = ((processedSize / originalSize) * 100).toFixed(2);
-    const thumbnailCompressionRatio = thumbnailSize ? ((thumbnailSize / originalSize) * 100).toFixed(2) : "0";
+    const mainCompressionRatio = processedSize > 0 ? ((1 - processedSize / originalSize) * 100).toFixed(2) : "0";
+    const thumbnailCompressionRatio = thumbnailSize ? ((1 - thumbnailSize / originalSize) * 100).toFixed(2) : "0";
     
     log(
         `处理成功 [${originalUrl}]\n` +
-        `  主图: ${galleryUrl} (${formatFileSize(originalSize)} → ${formatFileSize(processedSize)}, ${mainCompressionRatio}%)\n` +
-        `  缩略图: ${thumbnailUrl || '无'} ${thumbnailSize ? `(${formatFileSize(thumbnailSize)}, ${thumbnailCompressionRatio}%)` : ''}`,
+        `  压缩率: 主图 ${mainCompressionRatio}%, 缩略图 ${thumbnailCompressionRatio}%\n` +
+        `  原本大小: ${formatFileSize(originalSize)}, 主图大小: ${formatFileSize(processedSize)}, 缩略图大小: ${thumbnailSize ? formatFileSize(thumbnailSize) : '无'}\n` +
+        `  主图: ${galleryUrl}\n` +
+        `  缩略图: ${thumbnailUrl || '无'}`,
         'success'
     );
 }
@@ -226,11 +242,11 @@ export async function uploadToGallery(
             return { galleryUrl: null, thumbnailUrl: null };
         }
 
-        const thumbnailUrl = media.thumbnailUrl 
+        const thumbnailResult = media.thumbnailUrl 
             ? await processThumbnail(media.thumbnailUrl, fileName, headers)
-            : null;
+            : { url: null };
 
-        if (media.thumbnailUrl && !thumbnailUrl) {
+        if (media.thumbnailUrl && !thumbnailResult.url) {
             log(`上传缩略图失败: ${media.thumbnailUrl}`, 'warn');
         }
 
@@ -239,10 +255,14 @@ export async function uploadToGallery(
             originalSize,
             processedMedia.size,
             galleryUrl,
-            thumbnailUrl
+            thumbnailResult.url,
+            thumbnailResult.size
         );
 
-        return { galleryUrl, thumbnailUrl };
+        return { 
+            galleryUrl, 
+            thumbnailUrl: thumbnailResult.url 
+        };
     } catch (error) {
         log(`处理失败: ${media.originMediaUrl}, ${error}`, 'error');
         return { galleryUrl: null, thumbnailUrl: null };
