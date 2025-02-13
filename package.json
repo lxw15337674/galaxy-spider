@@ -1,5 +1,5 @@
 {
-  "name": "gallery-spider",
+  "name": "galaxy-spider",
   "module": "index.ts",
   "type": "module",
   "scripts": {

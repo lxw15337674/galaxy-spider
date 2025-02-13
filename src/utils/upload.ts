@@ -12,7 +12,6 @@ const SUPPORTED_EXTENSIONS = {
     'png': 'image/png',
     'gif': 'image/gif',
     'webp': 'image/webp',
-    'avif': 'image/avif',
     'mov': 'video/quicktime',
     'mp4': 'video/mp4'
 } as const;
@@ -57,7 +56,7 @@ async function uploadToGalleryServer(
 ): Promise<string | null> {
     try {
         const formData = new FormData();
-        const finalFileName = isThumb ? fileName.replace(/\.[^.]+$/, '_thumb.avif') : fileName;
+        const finalFileName = isThumb ? fileName.replace(/\.[^.]+$/, '_thumb') : fileName;
         formData.append('file', new Blob([buffer], { type: mimeType }), finalFileName);
 
         const response = await retryRequest(async () => {
@@ -133,13 +132,13 @@ interface ProcessedMedia {
 
 async function processImage(buffer: Buffer, fileName: string): Promise<ProcessedMedia> {
     const processed = await sharp(buffer)
-        .avif({ quality: 80 })
+        .png({ quality: 90 })
         .toBuffer();
     
     return {
         buffer: processed,
-        mimeType: 'image/avif',
-        fileName: `${fileName}.avif`,
+        mimeType: 'image/png',
+        fileName: `${fileName}.png`,
         size: processed.length
     };
 }
@@ -158,11 +157,11 @@ async function processThumbnail(
     if (!thumbnailBuffer) return { url: null };
 
     const processed = await sharp(thumbnailBuffer)
-        .avif({ quality: 40 })
+        .png({ quality: 40 })
         .toBuffer();
     
-    const thumbFileName = `${fileName}_thumb.avif`;
-    const thumbUrl = await uploadToGalleryServer(processed, thumbFileName, 'image/avif', true);
+    const thumbFileName = `${fileName}_thumb.png`;
+    const thumbUrl = await uploadToGalleryServer(processed, thumbFileName, 'image/png', true);
     
     return {
         url: thumbUrl,
