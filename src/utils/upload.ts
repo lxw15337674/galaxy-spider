@@ -48,31 +48,39 @@ async function downloadMedia(url: string, headers: Record<string, string>, isVid
     }
 }
 
+export interface GalleryUploadResponse {
+    /** 原始文件URL */
+    src: string;
+    /** 缩略图信息 */
+    thumbnail?: {
+        /** 缩略图URL */
+        src: string;
+        /** 缩略图宽度 */
+        width: number;
+        /** 缩略图高度 */
+        height: number;
+    };
+}
+
+
 async function uploadToGalleryServer(
     buffer: Buffer,
-    fileName: string,
     mimeType: string,
-    isThumb = false
-): Promise<string | null> {
+): Promise<GalleryUploadResponse|null> {
     try {
         const formData = new FormData();
-        const finalFileName = isThumb ? fileName.replace(/\.[^.]+$/, '_thumb') : fileName;
-        formData.append('file', new Blob([buffer], { type: mimeType }), finalFileName);
+        const extension = mimeType.split('/')[1];
+        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${extension}`;
+        formData.append('file', new Blob([buffer], { type: mimeType }), fileName);
 
         const response = await retryRequest(async () => {
-            return await axios.post(`${GALLERY_URL}/upload`, formData, {
+            return await axios.post<GalleryUploadResponse[]>(`${GALLERY_URL}/upload`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
         });
-
-        if (!response.data[0]?.src) {
-            throw new Error('上传响应缺少文件URL');
-        }
-
-        const url = `${response.data[0].src}`;
-        return url;
+        return response.data[0];
     } catch (error) {
-        log(`${isThumb ? '缩略图' : '文件'}上传失败: ${error}`, 'error');
+        log(`上传失败: ${error}`, 'error');
         return null;
     }
 }
@@ -132,7 +140,7 @@ interface ProcessedMedia {
 
 async function processImage(buffer: Buffer, fileName: string): Promise<ProcessedMedia> {
     const processed = await sharp(buffer)
-        .png({ quality: 90 })
+        .png({ quality: 100 })
         .toBuffer();
     
     return {
@@ -143,124 +151,94 @@ async function processImage(buffer: Buffer, fileName: string): Promise<Processed
     };
 }
 
-interface ThumbnailResult {
-    url: string | null;
-    size?: number;
+
+async function processThumb(url: string, headers: Record<string, string>): Promise<string|null> {
+    const ext = getFileExtension(url).toLowerCase();
+    if (!isImage(ext)) return null;
+    const thumbBuffer = await downloadMedia(url, headers, false);
+    if (!thumbBuffer) return null;
+    const processed = await processImage(thumbBuffer, `thumb_${Date.now()}`);
+    const uploadRes = await uploadToGalleryServer(processed.buffer, processed.mimeType);
+    return uploadRes?.src || null;
 }
 
-async function processThumbnail(
-    url: string, 
-    fileName: string, 
-    headers: Record<string, string>
-): Promise<ThumbnailResult> {
-    const thumbnailBuffer = await downloadMedia(url, headers, false);
-    if (!thumbnailBuffer) return { url: null };
-
-    const processed = await sharp(thumbnailBuffer)
-        .png({ quality: 40 })
-        .toBuffer();
-    
-    const thumbFileName = `${fileName}_thumb.png`;
-    const thumbUrl = await uploadToGalleryServer(processed, thumbFileName, 'image/png', true);
-    
-    return {
-        url: thumbUrl,
-        size: processed.length
-    };
-}
-
-async function logUploadStats(
+ function logUploadStats(
     originalUrl: string, 
     originalSize: number, 
     processedSize: number, 
     galleryUrl: string | null,
     thumbnailUrl: string | null,
-    thumbnailSize?: number
 ) {
-    const mainCompressionRatio = processedSize > 0 ? ((1 - processedSize / originalSize) * 100).toFixed(2) : "0";
-    const thumbnailCompressionRatio = thumbnailSize ? ((1 - thumbnailSize / originalSize) * 100).toFixed(2) : "0";
+    const sizeChangeRate = processedSize > 0
+        ? ((processedSize / originalSize) * 100).toFixed(2)
+        : "0";
     
     log(
         `处理成功 [${originalUrl}]\n` +
-        `  压缩率: 主图 ${mainCompressionRatio}%, 缩略图 ${thumbnailCompressionRatio}%\n` +
-        `  原本大小: ${formatFileSize(originalSize)}, 主图大小: ${formatFileSize(processedSize)}, 缩略图大小: ${thumbnailSize ? formatFileSize(thumbnailSize) : '无'}\n` +
+        `  尺寸变化比: ${sizeChangeRate}%\n` +
+        `  原本大小: ${formatFileSize(originalSize)}, 主图大小: ${formatFileSize(processedSize)}\n` +
         `  主图: ${galleryUrl}\n` +
         `  缩略图: ${thumbnailUrl || '无'}`,
         'success'
     );
 }
 
+
 export async function uploadToGallery(
     media: MediaInfo, 
     headers: Record<string, string> = {}
 ): Promise<MediaUploadResult> {
     try {
-        const extension = getFileExtension(media.originMediaUrl);
+        const extension = getFileExtension(media.originMediaUrl).toLowerCase();
         if (!isImage(extension) && !isVideo(extension)) {
-            log(`不支持的文件类型: ${media.originMediaUrl}`, 'warn');
+            log(`不支持的文件类型: ${extension} (${media.originMediaUrl})`, 'warn');
             return { galleryUrl: null, thumbnailUrl: null };
         }
 
         const isVideoFile = isVideo(extension);
         const mediaBuffer = await downloadMedia(media.originMediaUrl, headers, isVideoFile);
-        if (!mediaBuffer) {
-            log(`下载媒体文件失败: ${media.originMediaUrl}`, 'error');
-            return { galleryUrl: null, thumbnailUrl: null };
-        }
+        if (!mediaBuffer) return { galleryUrl: null, thumbnailUrl: null };
 
         const originalSize = mediaBuffer.length;
-        const fileName = Date.now() + '.' + extension;
+        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${extension}`;
 
         let processedMedia: ProcessedMedia;
-        if (isImage(extension)) {
-            try {
-                processedMedia = await processImage(mediaBuffer, fileName);
-            } catch (error) {
-                log(`处理图片失败: ${media.originMediaUrl}, ${error}`, 'error');
-                return { galleryUrl: null, thumbnailUrl: null };
-            }
-        } else {
-            processedMedia = {
-                buffer: mediaBuffer,
-                mimeType: SUPPORTED_EXTENSIONS[extension as SupportedExtension],
-                fileName,
-                size: mediaBuffer.length
-            };
-            log(`开始上传视频 [${media.originMediaUrl}] (${formatFileSize(originalSize)})`, 'info');
+        try {
+            processedMedia = isImage(extension)
+                ? await processImage(mediaBuffer, fileName)
+                : {
+                    buffer: mediaBuffer,
+                    mimeType: SUPPORTED_EXTENSIONS[extension as SupportedExtension],
+                    fileName,
+                    size: mediaBuffer.length
+                };
+        } catch (error) {
+            throw new Error('处理失败');
         }
 
-        const galleryUrl = await uploadToGalleryServer(
+        const gallery = await uploadToGalleryServer(
             processedMedia.buffer,
-            processedMedia.fileName,
-            processedMedia.mimeType,
-            false
+            processedMedia.mimeType
         );
 
-        if (!galleryUrl) {
-            log(`上传${isVideoFile ? '视频' : '主图'}失败: ${media.originMediaUrl}`, 'error');
-            return { galleryUrl: null, thumbnailUrl: null };
+        if (!gallery?.src) {
+            throw new Error('上传失败');
         }
 
-        const thumbnailResult = media.thumbnailUrl 
-            ? await processThumbnail(media.thumbnailUrl, fileName, headers)
-            : { url: null };
+        // 处理缩略图
+        const thumb = gallery?.thumbnail?.src || (media.thumbnailUrl ? await processThumb(media.thumbnailUrl, headers) : null);
 
-        if (media.thumbnailUrl && !thumbnailResult.url) {
-            log(`上传缩略图失败: ${media.thumbnailUrl}`, 'warn');
-        }
-
-        await logUploadStats(
+        logUploadStats(
             media.originMediaUrl,
             originalSize,
             processedMedia.size,
-            galleryUrl,
-            thumbnailResult.url,
-            thumbnailResult.size
+            gallery.src,
+            thumb
         );
 
-        return { 
-            galleryUrl, 
-            thumbnailUrl: thumbnailResult.url 
+        return {
+            galleryUrl: gallery.src,
+            thumbnailUrl: thumb
         };
     } catch (error) {
         log(`处理失败: ${media.originMediaUrl}, ${error}`, 'error');

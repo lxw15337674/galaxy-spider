@@ -56,8 +56,6 @@ describe('Weibo Video Tests', () => {
         }
     });
 
-
-
     it('应该能成功将livePhoto微博媒体上传到图库', async () => {
         const page = await browserManager.createPage();
         const data = await getWeiboPost('5118093107403364', page);
@@ -80,7 +78,6 @@ describe('Weibo Video Tests', () => {
     //     expect(galleryUrl).toBeDefined();
     //     expect(thumbnailUrl).toBeDefined();
     // });
-
 
     afterEach(() => {
         browserManager.closeBrowser();
