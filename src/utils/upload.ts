@@ -66,11 +66,10 @@ export interface GalleryUploadResponse {
 async function uploadToGalleryServer(
     buffer: Buffer,
     mimeType: string,
+    fileName: string 
 ): Promise<GalleryUploadResponse|null> {
     try {
         const formData = new FormData();
-        const extension = mimeType.split('/')[1];
-        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${extension}`;
         formData.append('file', new Blob([buffer], { type: mimeType }), fileName);
 
         const response = await retryRequest(async () => {
@@ -157,8 +156,8 @@ async function processThumb(url: string, headers: Record<string, string>): Promi
     if (!isImage(ext)) return null;
     const thumbBuffer = await downloadMedia(url, headers, false);
     if (!thumbBuffer) return null;
-    const processed = await processImage(thumbBuffer, `thumb_${Date.now()}`);
-    const uploadRes = await uploadToGalleryServer(processed.buffer, processed.mimeType);
+    const processed = await processImage(thumbBuffer, `${Date.now()}_thumb`);
+    const uploadRes = await uploadToGalleryServer(processed.buffer, processed.mimeType, processed.fileName);
     return uploadRes?.src || null;
 }
 
@@ -200,7 +199,7 @@ export async function uploadToGallery(
         if (!mediaBuffer) return { galleryUrl: null, thumbnailUrl: null };
 
         const originalSize = mediaBuffer.length;
-        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${extension}`;
+        const fileName = `${Date.now()}.${extension}`;
 
         let processedMedia: ProcessedMedia;
         try {
@@ -218,7 +217,8 @@ export async function uploadToGallery(
 
         const gallery = await uploadToGalleryServer(
             processedMedia.buffer,
-            processedMedia.mimeType
+            processedMedia.mimeType,
+            fileName
         );
 
         if (!gallery?.src) {
