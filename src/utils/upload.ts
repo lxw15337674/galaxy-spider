@@ -139,7 +139,7 @@ interface ProcessedMedia {
 
 async function processImage(buffer: Buffer, fileName: string): Promise<ProcessedMedia> {
     const processed = await sharp(buffer)
-        .png({ quality: 100 })
+        .png({ quality: 80 })
         .toBuffer();
     
     return {
