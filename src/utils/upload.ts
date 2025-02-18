@@ -138,15 +138,12 @@ interface ProcessedMedia {
 }
 
 async function processImage(buffer: Buffer, fileName: string): Promise<ProcessedMedia> {
-    const processed = await sharp(buffer)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-    
+     const webpImage = await sharp(buffer).webp({ quality: 90 }).toBuffer();
     return {
-        buffer: processed,
-        mimeType: 'image/jpeg',
-        fileName: `${fileName}.jpg`,
-        size: processed.length
+        buffer: webpImage,
+        mimeType:  SUPPORTED_EXTENSIONS['webp'],
+        fileName: `${fileName}.webp`,
+        size: webpImage.length
     };
 }
 
