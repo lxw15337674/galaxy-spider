@@ -41,6 +41,21 @@ describe('Weibo Video Tests', () => {
         }
     });
 
+    // 4976418800539771,多个图片
+    it('应该能成功获取指定微博帖子的图片媒体信息', async () => {
+        const page = await browserManager.createPage();
+        const data = await getWeiboPost('4976418800539771', page);
+        expect(data?.medias).toBeDefined();
+        expect(data?.medias?.length).toBeGreaterThan(0);
+        // 验证所有媒体URL都可访问
+        for (const media of data?.medias || []) {
+            const result = await uploadToGallery(media, {
+                Referer: 'https://weibo.com/'
+            });
+            expect(result).toBeDefined ();
+        }
+    });
+
     // 5120079876328548,单个视频
     it('应该能成功获取指定微博帖子的视频媒体信息', async () => {
         const page = await browserManager.createPage();

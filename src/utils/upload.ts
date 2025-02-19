@@ -137,7 +137,7 @@ interface ProcessedMedia {
     size: number;
 }
 
-async function processImage(buffer: Buffer, fileName: string): Promise<ProcessedMedia> {
+async function processImage(buffer: Buffer, fileName: string = `${Date.now()}`): Promise<ProcessedMedia> {
      const webpImage = await sharp(buffer).webp({ quality: 90 }).toBuffer();
     return {
         buffer: webpImage,
@@ -201,7 +201,7 @@ export async function uploadToGallery(
         let processedMedia: ProcessedMedia;
         try {
             processedMedia = isImage(extension)
-                ? await processImage(mediaBuffer, fileName)
+                ? await processImage(mediaBuffer)
                 : {
                     buffer: mediaBuffer,
                     mimeType: SUPPORTED_EXTENSIONS[extension as SupportedExtension],
@@ -215,7 +215,7 @@ export async function uploadToGallery(
         const gallery = await uploadToGalleryServer(
             processedMedia.buffer,
             processedMedia.mimeType,
-            fileName
+            processedMedia.fileName
         );
 
         if (!gallery?.src) {
