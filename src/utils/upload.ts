@@ -137,8 +137,9 @@ interface ProcessedMedia {
     size: number;
 }
 
-async function processImage(buffer: Buffer, fileName: string = `${Date.now()}`): Promise<ProcessedMedia> {
-     const webpImage = await sharp(buffer).webp({ quality: 90 }).toBuffer();
+async function processImage(buffer: Buffer, quality: number): Promise<ProcessedMedia> {
+    const fileName = `${Date.now()}`;
+     const webpImage = await sharp(buffer).webp({ quality }).toBuffer();
     return {
         buffer: webpImage,
         mimeType:  SUPPORTED_EXTENSIONS['webp'],
@@ -153,7 +154,7 @@ async function processThumb(url: string, headers: Record<string, string>): Promi
     if (!isImage(ext)) return null;
     const thumbBuffer = await downloadMedia(url, headers, false);
     if (!thumbBuffer) return null;
-    const processed = await processImage(thumbBuffer, `${Date.now()}_thumb`);
+    const processed = await processImage(thumbBuffer, 100);
     const uploadRes = await uploadToGalleryServer(processed.buffer, processed.mimeType, processed.fileName);
     return uploadRes?.src || null;
 }
@@ -201,7 +202,7 @@ export async function uploadToGallery(
         let processedMedia: ProcessedMedia;
         try {
             processedMedia = isImage(extension)
-                ? await processImage(mediaBuffer)
+                ? await processImage(mediaBuffer,90)
                 : {
                     buffer: mediaBuffer,
                     mimeType: SUPPORTED_EXTENSIONS[extension as SupportedExtension],
@@ -223,7 +224,7 @@ export async function uploadToGallery(
         }
 
         // 处理缩略图
-        const thumb = gallery?.thumbnail?.src || (media.thumbnailUrl ? await processThumb(media.thumbnailUrl, headers) : null);
+        const thumb = media.thumbnailUrl ? await processThumb(media.thumbnailUrl, headers) : null
 
         logUploadStats(
             media.originMediaUrl,
