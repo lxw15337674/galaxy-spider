@@ -1,3 +1,5 @@
+import type { WeiboUser } from "../../consumer/Weibo/types";
+
 // 基础页面信息接口
 interface BasePageInfo {
     containerid: string;
@@ -89,7 +91,7 @@ export interface WeiboMblog {
     pic_ids: string[];
     pics?: WeiboPic[];
     page_info?: WeiboPageInfo;
-    live_photo?: string[];
+    live_photo?: string[]; 
     bid: string;
     is_paid?: boolean;
     mblog_vip_type?: number;
@@ -98,6 +100,7 @@ export interface WeiboMblog {
     attitudes_count?: number;
     pending_approval_count?: number;
     isLongText?: boolean;
+    user:WeiboUser
 }
 
 // 卡片基础接口

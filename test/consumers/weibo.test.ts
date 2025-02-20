@@ -41,10 +41,10 @@ describe('Weibo Video Tests', () => {
         }
     });
 
-    // 4976418800539771,多个图片
+    // 5136227600437648,多个图片
     it('应该能成功获取指定微博帖子的图片媒体信息', async () => {
         const page = await browserManager.createPage();
-        const data = await getWeiboPost('4976418800539771', page);
+        const data = await getWeiboPost('5136227600437648', page);
         expect(data?.medias).toBeDefined();
         expect(data?.medias?.length).toBeGreaterThan(0);
         // 验证所有媒体URL都可访问

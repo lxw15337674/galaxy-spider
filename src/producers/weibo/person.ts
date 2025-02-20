@@ -75,7 +75,7 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
         const createdPost = await createPost({
             platformId: post.id,
             platform: 'WEIBO' as Platform,
-            userId: producer.producerId || '',
+            userId: post.user.id.toString() || '',
             producerId: producer.id,
             createTime: new Date(post.created_at)
         });
