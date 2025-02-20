@@ -71,7 +71,6 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             log(`帖子 ${post.id} 未包含媒体，跳过`, 'info');
             return 0;
         }
-        // Create post record first
         const createdPost = await createPost({
             platformId: post.id,
             platform: 'WEIBO' as Platform,
