@@ -154,7 +154,7 @@ async function processThumb(url: string, headers: Record<string, string>): Promi
     if (!isImage(ext)) return null;
     const thumbBuffer = await downloadMedia(url, headers, false);
     if (!thumbBuffer) return null;
-    const processed = await processImage(thumbBuffer, 100);
+    const processed = await processImage(thumbBuffer, 60);
     const uploadRes = await uploadToGalleryServer(processed.buffer, processed.mimeType, processed.fileName);
     return uploadRes?.src || null;
 }
