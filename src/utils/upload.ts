@@ -154,7 +154,7 @@ async function processThumb(url: string, headers: Record<string, string>): Promi
     if (!isImage(ext)) return null;
     const thumbBuffer = await downloadMedia(url, headers, false);
     if (!thumbBuffer) return null;
-    const processed = await processImage(thumbBuffer, 50);
+    const processed = await processImage(thumbBuffer, 40);
     const uploadRes = await uploadToGalleryServer(processed.buffer, processed.mimeType, processed.fileName);
     return uploadRes?.src || null;
 }
@@ -202,7 +202,7 @@ export async function uploadToGallery(
         let processedMedia: ProcessedMedia;
         try {
             processedMedia = isImage(extension)
-                ? await processImage(mediaBuffer,90)
+                ? await processImage(mediaBuffer,80)
                 : {
                     buffer: mediaBuffer,
                     mimeType: SUPPORTED_EXTENSIONS[extension as SupportedExtension],
