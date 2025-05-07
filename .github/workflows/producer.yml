@@ -30,3 +30,11 @@ jobs:
 
       - name: Run Producer
         run: pnpm run produce  # 需要在 package.json 中添加这个命令 
+  keepalive-job:
+    name: Keepalive Workflow
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gautamkrishnar/keepalive-workflow@v2
