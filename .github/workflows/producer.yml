@@ -48,4 +48,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           git commit --allow-empty -m "保持工作流活跃 - $(date +'%Y/%m/%d %I:%M%p')"
-          git push
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
