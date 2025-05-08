@@ -34,21 +34,21 @@ jobs:
         run: pnpm run produce
 
 
-  keepalive-job:
-    name: Keepalive Workflow
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Commit Changes
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add .
-          git commit --allow-empty -m "保持工作流活跃 - $(date +'%Y/%m/%d %I:%M%p')"
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+  # keepalive-job:
+  #   name: Keepalive Workflow
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     actions: write
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v4
+  #     - name: Commit Changes
+  #       run: |
+  #         git config --local user.email "github-actions[bot]@users.noreply.github.com"
+  #         git config --local user.name "github-actions[bot]"
+  #         git add .
+  #         git commit --allow-empty -m "保持工作流活跃 - $(date +'%Y/%m/%d %I:%M%p')"
+  #     - name: Push changes
+  #       uses: ad-m/github-push-action@master
+  #       with:
+  #         github_token: ${{ secrets.GITHUB_TOKEN }}
