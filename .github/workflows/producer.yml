@@ -33,6 +33,7 @@ jobs:
       - name: Run Producer
         run: pnpm run produce
 
+
   keepalive-job:
     name: Keepalive Workflow
     runs-on: ubuntu-latest
@@ -42,4 +43,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
       - name: Commit Changes
-        run: bash ./commit.bash
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .
+          git commit --allow-empty -m "保持工作流活跃 - $(date +'%Y/%m/%d %I:%M%p')"
+          git push
