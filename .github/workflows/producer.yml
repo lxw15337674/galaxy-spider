@@ -1,4 +1,4 @@
-name: Weibo  Producer
+name: Weibo Producer
 
 on:
   schedule:
@@ -8,6 +8,8 @@ on:
 jobs:
   produce-weibo:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write      # 添加写入权限
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     
@@ -29,12 +31,15 @@ jobs:
         run: pnpm install
 
       - name: Run Producer
-        run: pnpm run produce  # 需要在 package.json 中添加这个命令 
+        run: pnpm run produce
+
   keepalive-job:
     name: Keepalive Workflow
     runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
       - name: Commit Changes
         run: bash ./commit.bash
