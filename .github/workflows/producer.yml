@@ -1,4 +1,4 @@
-name: Weibo Producer
+name: Weibo  Producer
 
 on:
   schedule:
@@ -9,7 +9,7 @@ jobs:
   produce-weibo:
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # 添加写入权限
+      contents: write  # 添加写入权限以便提交
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     
@@ -31,24 +31,19 @@ jobs:
         run: pnpm install
 
       - name: Run Producer
-        run: pnpm run produce
+        run: pnpm run produce  # 需要在 package.json 中添加这个命令 
 
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
 
-  # keepalive-job:
-  #   name: Keepalive Workflow
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     actions: write
-  #   steps:
-  #     - name: Checkout Code
-  #       uses: actions/checkout@v4
-  #     - name: Commit Changes
-  #       run: |
-  #         git config --local user.email "github-actions[bot]@users.noreply.github.com"
-  #         git config --local user.name "github-actions[bot]"
-  #         git add .
-  #         git commit --allow-empty -m "保持工作流活跃 - $(date +'%Y/%m/%d %I:%M%p')"
-  #     - name: Push changes
-  #       uses: ad-m/github-push-action@master
-  #       with:
-  #         github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and Push Changes
+        run: |
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: auto update data - producer run at $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
