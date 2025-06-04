@@ -41,9 +41,5 @@ jobs:
       - name: Commit and Push Changes
         run: |
           git add -A
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: auto update data - producer run at $(date -u '+%Y-%m-%d %H:%M UTC')"
-            git push
-          fi
+          git commit --allow-empty -m "chore: auto update data - producer run at $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
