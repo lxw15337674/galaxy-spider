@@ -202,7 +202,7 @@ export async function uploadToGallery(
         let processedMedia: ProcessedMedia;
         try {
             processedMedia = isImage(extension)
-                ? await processImage(mediaBuffer,90)
+                ? await processImage(mediaBuffer,100)
                 : {
                     buffer: mediaBuffer,
                     mimeType: SUPPORTED_EXTENSIONS[extension as SupportedExtension],
