@@ -9,7 +9,7 @@ class BrowserManager {
     async getBrowser(): Promise<Browser> {
         if (!this.browser) {
             this.browser = await playwright.chromium.launch({
-                headless: false
+                headless: true
             });
         }
         return this.browser;
