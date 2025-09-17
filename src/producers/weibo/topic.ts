@@ -70,7 +70,7 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
                 });
 
                 const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
-                await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
                 
                 const content = await page.textContent('body');
                 if (!content) {

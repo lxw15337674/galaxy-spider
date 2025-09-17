@@ -36,7 +36,7 @@ function hasMedia(mblog: WeiboMblog): boolean {
 const getContainerId = async (userId: string, page: Page): Promise<string|null> => {
     try {
         const url = `${API_CONFIG.baseUrl}?type=uid&value=${userId}`;
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
         const content = await page.textContent('body');
         if (!content) {
             throw new Error('页面内容为空');
@@ -61,7 +61,7 @@ const fetchPage = async (userId: string, containerId: string, page: Page, sinceI
     });
 
     const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     
     const content = await page.textContent('body');
     if (!content) {
