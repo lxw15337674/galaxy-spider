@@ -1,11 +1,12 @@
-import axios from 'axios';
 import { type Producer, type Platform, ProducerType } from '@prisma/client';
+import { type Page } from 'playwright';
 import { sleep } from '../../utils';
 import type { WeiboMblog } from './types';
 import { log } from '../../utils/log';
 import { createPost } from '../../db/post';
 import type { PageResult } from './types';
 import { getProducers, getProducerById, updateProducerLastPostTime } from '../../db/producer';
+import { browserManager } from '../../browser';
 
 // Constants
 const API_CONFIG = {
@@ -32,30 +33,42 @@ function hasMedia(mblog: WeiboMblog): boolean {
 }
 
 // API functions
-const getContainerId = async (userId: string): Promise<string|null> => {
+const getContainerId = async (userId: string, page: Page): Promise<string|null> => {
     try {
-        const { data } = await axios.get(`${API_CONFIG.baseUrl}?type=uid&value=${userId}`);
+        const url = `${API_CONFIG.baseUrl}?type=uid&value=${userId}`;
+        await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+        const content = await page.textContent('body');
+        if (!content) {
+            throw new Error('页面内容为空');
+        }
+        
+        const data = JSON.parse(content);
         const containerId = data.data.tabsInfo.tabs[1].containerid;
         log(`获取到用户containerId: ${containerId}`, 'info');
         return containerId;
     } catch (error) {
-        log('获取用户信息失败: ' + userId, 'error');
+        log('获取用户信息失败: ' + userId + ' - ' + error, 'error');
         return null;
     }
 };
 
-const fetchPage = async (userId: string, containerId: string, sinceId?: string): Promise<PageResult> => {
-    const params = {
+const fetchPage = async (userId: string, containerId: string, page: Page, sinceId?: string): Promise<PageResult> => {
+    const params = new URLSearchParams({
         type: "uid",
         value: userId,
         containerid: containerId,
         ...(sinceId && { since_id: sinceId })
-    };
-
-    const { data } = await axios.get(API_CONFIG.baseUrl, {
-        params,
-        headers: API_CONFIG.headers
     });
+
+    const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+    
+    const content = await page.textContent('body');
+    if (!content) {
+        throw new Error('页面内容为空');
+    }
+    
+    const data = JSON.parse(content);
 
     return {
         cards: data.data.cards
@@ -104,53 +117,60 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
         log(`检测到lastPostTime，限制爬取页数为${actualMaxPages}页`, 'info');
     }
 
-    log(`开始获取用户 ${producer.name || producer.producerId} 的containerId`, 'info');
-    const containerId = await getContainerId(producer.producerId);
-    if (!containerId) return 0;
+    // 创建 page 实例
+    const page = await browserManager.createPage();
 
-    let processedCount = 0;
-    let sinceId: string | undefined;
+    try {
+        log(`开始获取用户 ${producer.name || producer.producerId} 的containerId`, 'info');
+        const containerId = await getContainerId(producer.producerId, page);
+        if (!containerId) return 0;
 
-    log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${actualMaxPages} 页`, 'info');
-    for (let page = 0; page < actualMaxPages; page++) {
-        try {
-            log(`[页面进度 ${page + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
-            const { cards, sinceId: newSinceId } = await fetchPage(producer.producerId, containerId, sinceId);
-            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取成功，包含 ${cards.length} 条微博`, 'info');
-            
-            let pageProcessedCount = 0;
-            for (let j = 0; j < cards.length; j++) {
-                const card = cards[j];
-                const result = await processPost(card, producer);
-                processedCount += result;
-                pageProcessedCount += result;
-                if (result) {
-                    log(`[页面进度 ${page + 1}/${actualMaxPages}][微博进度 ${j + 1}/${cards.length}] 成功处理微博 ${card.id}`, 'info');
+        let processedCount = 0;
+        let sinceId: string | undefined;
+
+        log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${actualMaxPages} 页`, 'info');
+        for (let pageNum = 0; pageNum < actualMaxPages; pageNum++) {
+            try {
+                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
+                const { cards, sinceId: newSinceId } = await fetchPage(producer.producerId, containerId, page, sinceId);
+                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取成功，包含 ${cards.length} 条微博`, 'info');
+                
+                let pageProcessedCount = 0;
+                for (let j = 0; j < cards.length; j++) {
+                    const card = cards[j];
+                    const result = await processPost(card, producer);
+                    processedCount += result;
+                    pageProcessedCount += result;
+                    if (result) {
+                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}][微博进度 ${j + 1}/${cards.length}] 成功处理微博 ${card.id}`, 'info');
+                    }
                 }
-            }
 
-            if (!newSinceId) {
-                log(`没有更多数据，结束获取`, 'info');
+                if (!newSinceId) {
+                    log(`没有更多数据，结束获取`, 'info');
+                    break;
+                }
+                sinceId = newSinceId;
+                await sleep(API_CONFIG.delayMs);
+
+            } catch (error) {
+                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取失败: ${error}`, 'error');
                 break;
             }
-            sinceId = newSinceId;
-            await sleep(API_CONFIG.delayMs);
-
-        } catch (error) {
-            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取失败: ${error}`, 'error');
-            break;
         }
-    }
 
-    log(`用户 ${producer.name || producer.producerId} 处理完成，共处理 ${processedCount} 条微博`, 'info');
-    
-    // 更新lastPostTime
-    if (processedCount > 0) {
-        await updateProducerLastPostTime(producer.id);
-        log(`已更新用户 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
+        log(`用户 ${producer.name || producer.producerId} 处理完成，共处理 ${processedCount} 条微博`, 'info');
+        
+        // 更新lastPostTime
+        if (processedCount > 0) {
+            await updateProducerLastPostTime(producer.id);
+            log(`已更新用户 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
+        }
+        
+        return processedCount;
+    } finally {
+        // 不需要在这里 cleanup，因为 browserManager 会复用 page
     }
-    
-    return processedCount;
 };
 
 export const processWeiboPerson = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
@@ -158,19 +178,24 @@ export const processWeiboPerson = async (maxPages: number = API_CONFIG.defaultMa
     const producers = await getProducers(ProducerType.WEIBO_PERSONAL);
     log(`开始处理微博用户，共 ${producers.length} 个账号`, 'info');
     
-    for (let i = 0; i < producers.length; i++) {
-        const producer = producers[i];
-        log(`[总进度 ${i + 1}/${producers.length}] 开始处理用户 ${producer.name || producer.producerId}`, 'info');
-        const count = await processUserPost(producer, maxPages);
-        totalProcessed += count;
-        log(`[总进度 ${i + 1}/${producers.length}] 用户处理完成，成功处理 ${count} 条微博`, 'info');
-        
-        if (i < producers.length - 1) {
-            log(`等待 ${API_CONFIG.delayMs}ms 后处理下一个用户...`, 'info');
-            await sleep(API_CONFIG.delayMs);
+    try {
+        for (let i = 0; i < producers.length; i++) {
+            const producer = producers[i];
+            log(`[总进度 ${i + 1}/${producers.length}] 开始处理用户 ${producer.name || producer.producerId}`, 'info');
+            const count = await processUserPost(producer, maxPages);
+            totalProcessed += count;
+            log(`[总进度 ${i + 1}/${producers.length}] 用户处理完成，成功处理 ${count} 条微博`, 'info');
+            
+            if (i < producers.length - 1) {
+                log(`等待 ${API_CONFIG.delayMs}ms 后处理下一个用户...`, 'info');
+                await sleep(API_CONFIG.delayMs);
+            }
         }
-    }
 
-    log(`所有用户处理完成，共处理 ${totalProcessed} 条微博`, 'info');
-    return totalProcessed;
+        log(`所有用户处理完成，共处理 ${totalProcessed} 条微博`, 'info');
+        return totalProcessed;
+    } finally {
+        // 清理浏览器资源
+        await browserManager.cleanup();
+    }
 }; 

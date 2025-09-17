@@ -1,10 +1,11 @@
-import axios from 'axios';
 import { ProducerType, type Producer } from '@prisma/client';
+import { type Page } from 'playwright';
 import { sleep } from '../../utils';
 import { log } from '../../utils/log';
 import { getProducers, updateProducerLastPostTime } from '../../db/producer';
 import { processPost } from './person';
 import type { Card, WeiboTopicResponse } from './types';
+import { browserManager } from '../../browser';
 
 //Constants
 const API_CONFIG = {
@@ -51,69 +52,84 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
         log(`检测到lastPostTime，限制爬取页数为${API_CONFIG.postedMaxPages}页`, 'info');
     }
 
-    log(`开始处理话题 ${producer.name || producer.producerId}，计划获取 ${actualMaxPages} 页`, 'info');
-    let totalProcessed = 0;
-    let sinceId: number | undefined;
+    // 创建 page 实例
+    const page = await browserManager.createPage();
 
-    for (let page = 0; page < actualMaxPages; page++) {
-        try {
-            log(`[页面进度 ${page + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
-            const response = await axios.get<WeiboTopicResponse>(API_CONFIG.baseUrl, {
-                params: {
+    try {
+        log(`开始处理话题 ${producer.name || producer.producerId}，计划获取 ${actualMaxPages} 页`, 'info');
+        let totalProcessed = 0;
+        let sinceId: number | undefined;
+
+        for (let pageNum = 0; pageNum < actualMaxPages; pageNum++) {
+            try {
+                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
+                
+                const params = new URLSearchParams({
                     containerid: producer.producerId,
-                    ...(sinceId && { since_id: sinceId })
-                },
-                headers: API_CONFIG.headers
-            });
+                    ...(sinceId && { since_id: sinceId.toString() })
+                });
 
-            if (!response.data.ok || !response.data.data.cards?.length) {
-                log(`[页面进度 ${page + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
-                break;
-            }
-
-            sinceId = response.data.data.pageInfo.since_id;
-            const validCards = extractType9Cards(response.data.data.cards);
-
-            if (!validCards.length) {
-                log(`[页面进度 ${page + 1}/${actualMaxPages}] 未找到有效帖子，继续下一页`, 'info');
-                continue;
-            }
-
-            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取成功，找到 ${validCards.length} 条帖子`, 'info');
-
-            for (let i = 0; i < validCards.length; i++) {
-                const card = validCards[i];
-                const count = await processPost(card.mblog, producer);
-                if (count > 0) {
-                    log(`[页面进度 ${page + 1}/${actualMaxPages}][帖子进度 ${i + 1}/${validCards.length}] 成功处理帖子 ${card.mblog.id}`, 'info');
+                const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
+                await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+                
+                const content = await page.textContent('body');
+                if (!content) {
+                    throw new Error('页面内容为空');
                 }
-                totalProcessed += count;
-            }
+                
+                const response: WeiboTopicResponse = JSON.parse(content);
 
-            if (!sinceId) {
-                log(`[页面进度 ${page + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
+                if (!response.ok || !response.data.cards?.length) {
+                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
+                    break;
+                }
+
+                sinceId = response.data.pageInfo.since_id;
+                const validCards = extractType9Cards(response.data.cards);
+
+                if (!validCards.length) {
+                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 未找到有效帖子，继续下一页`, 'info');
+                    continue;
+                }
+
+                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取成功，找到 ${validCards.length} 条帖子`, 'info');
+
+                for (let i = 0; i < validCards.length; i++) {
+                    const card = validCards[i];
+                    const count = await processPost(card.mblog, producer);
+                    if (count > 0) {
+                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}][帖子进度 ${i + 1}/${validCards.length}] 成功处理帖子 ${card.mblog.id}`, 'info');
+                    }
+                    totalProcessed += count;
+                }
+
+                if (!sinceId) {
+                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
+                    break;
+                }
+
+                if (pageNum < actualMaxPages - 1) {
+                    log(`等待 ${API_CONFIG.delayMs}ms 后获取下一页...`, 'info');
+                    await sleep(API_CONFIG.delayMs);
+                }
+            } catch (error) {
+                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取失败: ${error}`, 'error');
                 break;
             }
-
-            if (page < actualMaxPages - 1) {
-                log(`等待 ${API_CONFIG.delayMs}ms 后获取下一页...`, 'info');
-                await sleep(API_CONFIG.delayMs);
-            }
-        } catch (error) {
-            log(`[页面进度 ${page + 1}/${actualMaxPages}] 获取失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
-            break;
         }
-    }
 
-    log(`话题 ${producer.name || producer.producerId} 处理完成，共处理 ${totalProcessed} 条帖子`, 'info');
-    
-    // 更新lastPostTime
-    if (totalProcessed > 0) {
-        await updateProducerLastPostTime(producer.id);
-        log(`已更新话题 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
+        log(`话题 ${producer.name || producer.producerId} 处理完成，共处理 ${totalProcessed} 条帖子`, 'info');
+        
+        // 更新lastPostTime
+        if (totalProcessed > 0) {
+            await updateProducerLastPostTime(producer.id);
+            log(`已更新话题 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
+        }
+        
+        return totalProcessed;
+    } finally {
+        // 不需要在这里 cleanup，因为 browserManager 会复用 page
     }
-    
-    return totalProcessed;
 };
 
 export const processWeiboTopic = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
@@ -143,5 +159,8 @@ export const processWeiboTopic = async (maxPages: number = API_CONFIG.defaultMax
     } catch (error) {
         log('微博话题处理失败: ' + error, 'error');
         return 0;
+    } finally {
+        // 清理浏览器资源
+        await browserManager.cleanup();
     }
 };
