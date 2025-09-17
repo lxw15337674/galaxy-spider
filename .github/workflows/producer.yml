@@ -30,6 +30,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install chromium
+
       - name: Run Producer
         run: pnpm run produce  # 需要在 package.json 中添加这个命令 
 
