@@ -1,5 +1,4 @@
 import { ProducerType, type Producer } from '@prisma/client';
-import { type Page } from 'playwright';
 import { sleep } from '../../utils';
 import { log } from '../../utils/log';
 import { getProducers, updateProducerLastPostTime } from '../../db/producer';

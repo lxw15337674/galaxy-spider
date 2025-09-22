@@ -18,8 +18,14 @@ class BrowserManager {
     async createPage(): Promise<Page> {
         if (!this.page) {
             const browser = await this.getBrowser();
-            this.context = await browser.newContext();
+            this.context = await browser.newContext({
+            });
             this.page = await this.context.newPage();
+
+            // 先访问微博首页建立会话
+            await this.page.goto('https://m.weibo.cn/', { waitUntil: 'domcontentloaded' });
+            // 可能需要等待一下，让页面完全加载
+            await this.page.waitForTimeout(1000);
         }
         return this.page;
     }
