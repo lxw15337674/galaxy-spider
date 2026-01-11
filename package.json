@@ -16,11 +16,20 @@
     "vite-node": "^2.1.8"
   },
   "dependencies": {
-    "@prisma/client": "6.2.1",
+    "@prisma/client": "6.19.1",
     "axios": "^1.7.9",
     "playwright": "^1.42.1",
-    "prisma": "^6.2.1",
+    "prisma": "6.19.1",
     "sharp": "^0.33.5",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma",
+      "sharp"
+    ]
   }
 }
