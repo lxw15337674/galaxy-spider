@@ -12,7 +12,7 @@ jobs:
       contents: write  # 添加写入权限以便提交
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
       GIST_ID: ${{ secrets.GIST_ID }}
     
     steps:
