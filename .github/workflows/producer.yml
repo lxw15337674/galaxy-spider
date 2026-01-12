@@ -38,6 +38,9 @@ jobs:
       - name: Install Playwright System Dependencies
         run: pnpm exec playwright install-deps chromium
 
+      - name: Refresh and Validate Cookies
+        run: pnpm run cookie:refresh
+
       - name: Run Producer
         run: pnpm run produce  # 需要在 package.json 中添加这个命令 
 

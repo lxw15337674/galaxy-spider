@@ -5,6 +5,8 @@ import { getProducers, updateProducerLastPostTime } from '../../db/producer';
 import { processPost } from './person';
 import type { Card, WeiboTopicResponse } from './types';
 import { browserManager } from '../../browser';
+import { getWeiboCnCookies } from '../../utils/cookie';
+import { config } from '../../config';
 
 //Constants
 const API_CONFIG = {
@@ -16,6 +18,9 @@ const API_CONFIG = {
     defaultMaxPages: 20,
     postedMaxPages: 5
 } as const;
+
+// Cookie 缓存
+let cachedCookies: any[] | null = null;
 
 // 递归提取所有 card_type 为 9 的卡片
 function extractType9Cards(data: Card[]): Card[] {
@@ -53,6 +58,20 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
 
     // 创建 page 实例
     const page = await browserManager.createPage();
+    
+    // 设置 Cookie
+    try {
+        if (!cachedCookies) {
+            log('正在从 Gist 获取微博 Cookie...', 'info');
+            cachedCookies = await getWeiboCnCookies();
+            log(`成功获取 ${cachedCookies.length} 个 Cookie`, 'info');
+        }
+        await page.context().addCookies(cachedCookies);
+        log('Cookie 设置成功', 'info');
+    } catch (error) {
+        log(`Cookie 设置失败: ${error}`, 'error');
+        throw error;
+    }
 
     try {
         log(`开始处理话题 ${producer.name || producer.producerId}，计划获取 ${actualMaxPages} 页`, 'info');
@@ -119,8 +138,7 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
 
         log(`话题 ${producer.name || producer.producerId} 处理完成，共处理 ${totalProcessed} 条帖子`, 'info');
         
-        // 更新lastPostTime
-        if (totalProcessed > 0) {
+        if (totalProcessed > 0 && !config.useTestData) {
             await updateProducerLastPostTime(producer.id);
             log(`已更新话题 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
         }
@@ -132,8 +150,21 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
 };
 
 export const processWeiboTopic = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
-    const producers = await getProducers(ProducerType.WEIBO_SUPER_TOPIC);
-    log(`开始处理微博超话，共 ${producers.length} 个话题`, 'info');
+    const producers = config.useTestData
+        ? [
+            {
+                id: 'test-topic-1',
+                name: '八三夭超话',
+                producerId: '100808dfa9a8980d720caae9bacf4af9da90fc',
+                type: 'WEIBO_SUPER_TOPIC' as any,
+                lastPostTime: null,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            }
+          ]
+        : await getProducers(ProducerType.WEIBO_SUPER_TOPIC);
+    
+    log(`${config.logPrefix} 开始处理微博超话，共 ${producers.length} 个话题`, 'info');
     
     try {
         let totalCount = 0;

@@ -6,18 +6,23 @@
     "migrate": "npx prisma db push && npx prisma generate",
     "consume": "vite-node ./src/consume.ts",
     "produce": "vite-node ./src/produce.ts",
+    "produce:test": "cross-env RUN_MODE=test vite-node ./src/produce.ts",
+    "produce:dev": "cross-env RUN_MODE=dev vite-node ./src/produce.ts",
+    "cookie:refresh": "vite-node ./src/scripts/refreshCookie.ts",
     "dev": "vite-node src/index.ts",
     "start": "vite-node src/index.ts",
     "test": "vitest"
   },
   "devDependencies": {
     "@types/node": "^20.19.28",
+    "cross-env": "^10.1.0",
     "typescript": "^5.9.3",
     "vite-node": "^2.1.9"
   },
   "dependencies": {
     "@prisma/client": "6.19.1",
     "axios": "^1.13.2",
+    "dotenv": "^17.2.3",
     "playwright": "^1.57.0",
     "prisma": "6.19.1",
     "sharp": "^0.33.5",

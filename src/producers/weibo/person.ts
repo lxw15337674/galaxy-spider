@@ -8,6 +8,7 @@ import type { PageResult } from './types';
 import { getProducers, getProducerById, updateProducerLastPostTime } from '../../db/producer';
 import { browserManager } from '../../browser';
 import { getWeiboCnCookies } from '../../utils/cookie';
+import { config } from '../../config';
 
 // Constants
 const API_CONFIG = {
@@ -126,6 +127,12 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             log(`帖子 ${post.id} 未包含媒体，跳过`, 'info');
             return 0;
         }
+        
+        if (!config.shouldWriteDB) {
+            log(`${config.logPrefix} 发现有媒体的帖子: ${post.id} (用户: ${post.user?.id || 'unknown'})`, 'info');
+            return 1;
+        }
+        
         const createdPost = await createPost({
             platformId: post.id,
             platform: 'WEIBO' as Platform,
@@ -147,7 +154,10 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
         return 0;
     }
 
-    const existingProducer = await getProducerById(producer.id);
+    const existingProducer = config.useTestData 
+        ? producer 
+        : await getProducerById(producer.id);
+        
     if (!existingProducer) {
         log(`Producer ${producer.id} not found in database`, 'error');
         return 0;
@@ -217,8 +227,7 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
 
         log(`用户 ${producer.name || producer.producerId} 处理完成，共处理 ${processedCount} 条微博`, 'info');
         
-        // 更新lastPostTime
-        if (processedCount > 0) {
+        if (processedCount > 0 && !config.useTestData) {
             await updateProducerLastPostTime(producer.id);
             log(`已更新用户 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
         }
@@ -231,8 +240,22 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
 
 export const processWeiboPerson = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
     let totalProcessed = 0;
-    const producers = await getProducers(ProducerType.WEIBO_PERSONAL);
-    log(`开始处理微博用户，共 ${producers.length} 个账号`, 'info');
+    
+    const producers = config.useTestData 
+        ? [
+            {
+                id: 'test-user-1',
+                name: '测试用户',
+                producerId: '5286960038',
+                type: 'WEIBO_PERSONAL' as any,
+                lastPostTime: null,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            }
+          ]
+        : await getProducers(ProducerType.WEIBO_PERSONAL);
+    
+    log(`${config.logPrefix} 开始处理微博用户，共 ${producers.length} 个账号`, 'info');
     
     try {
         for (let i = 0; i < producers.length; i++) {
