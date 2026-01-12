@@ -7,7 +7,7 @@ import { createPost } from '../../db/post';
 import type { PageResult } from './types';
 import { getProducers, getProducerById, updateProducerLastPostTime } from '../../db/producer';
 import { browserManager } from '../../browser';
-import { getWeiboCnCookies } from '../../utils/cookie';
+import { getCachedCookies } from '../../utils/cookie';
 import { config } from '../../config';
 
 // Constants
@@ -95,14 +95,17 @@ const parseWeiboFromHtml = async (page: Page): Promise<WeiboMblog[]> => {
 const fetchPage = async (userId: string, pageNum: number, page: Page): Promise<PageResult> => {
     const url = `${API_CONFIG.baseUrl}/${userId}/profile?page=${pageNum}`;
     
-    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const response = await page.goto(url, { 
+        waitUntil: 'networkidle',  // 等待网络请求完成
+        timeout: 60000 
+    });
     
     if (response?.status() !== 200) {
         throw new Error(`请求失败，状态码: ${response?.status()}`);
     }
     
-    // 等待页面加载
-    await page.waitForTimeout(1000);
+    // 额外等待页面完全渲染
+    await page.waitForTimeout(2000);
     
     // 解析页面获取微博数据
     const cards = await parseWeiboFromHtml(page);
@@ -175,8 +178,8 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
     // 设置 Cookie
     try {
         if (!cachedCookies) {
-            log('正在从 Gist 获取微博 Cookie...', 'info');
-            cachedCookies = await getWeiboCnCookies();
+            log('正在获取微博 Cookie...', 'info');
+            cachedCookies = await getCachedCookies();
             log(`成功获取 ${cachedCookies.length} 个 Cookie`, 'info');
         }
         await page.context().addCookies(cachedCookies);

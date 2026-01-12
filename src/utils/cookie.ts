@@ -10,6 +10,9 @@ if (!GITHUB_TOKEN || !GIST_ID) {
     throw new Error('缺少必要的环境变量: GITHUB_TOKEN 和 GIST_ID 必须在 .env 文件中配置');
 }
 
+// 全局 Cookie 缓存
+let cookieCache: PlaywrightCookie[] | null = null;
+
 export interface CookieItem {
     name: string;
     value: string;
@@ -107,17 +110,23 @@ export function convertToPlaywrightCookies(
 }
 
 /**
- * 从 Gist 获取 weibo 通用 Cookie（支持多个子域名）
+ * 获取缓存的 Cookie，如果没有则从 Gist 获取
  */
-export async function getWeiboCnCookies(): Promise<PlaywrightCookie[]> {
-    // 从 Gist 获取 weibo.com 的 cookie
-    const cookies = await fetchCookiesFromGist('weibo.com');
-    
-    // 同时转换为 .weibo.cn 和 .weibo.com 域名，覆盖所有子域名
-    return [
-        ...convertToPlaywrightCookies(cookies, '.weibo.cn'),
-        ...convertToPlaywrightCookies(cookies, '.weibo.com')
-    ];
+export async function getCachedCookies(): Promise<PlaywrightCookie[]> {
+    if (!cookieCache) {
+        console.log('📥 从 Gist 获取 Cookie...');
+        cookieCache = await getWeiboCnCookies();
+        console.log(`✅ 成功获取 ${cookieCache.length} 个 Cookie`);
+    }
+    return cookieCache;
+}
+
+/**
+ * 清除 Cookie 缓存（刷新时使用）
+ */
+export function clearCookieCache(): void {
+    cookieCache = null;
+    console.log('🗑️ Cookie 缓存已清除');
 }
 
 /**
@@ -291,6 +300,9 @@ export async function refreshAndValidateCookies(): Promise<boolean> {
         
         // 4. 推送到 Gist
         await updateCookiesToGist(refreshedCookies);
+        
+        // 5. 清除缓存，强制下次重新获取
+        clearCookieCache();
         
         console.log('✅ Cookie 刷新流程完成');
         await browser.close();

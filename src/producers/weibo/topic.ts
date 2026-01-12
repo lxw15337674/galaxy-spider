@@ -5,7 +5,7 @@ import { getProducers, updateProducerLastPostTime } from '../../db/producer';
 import { processPost } from './person';
 import type { Card, WeiboTopicResponse } from './types';
 import { browserManager } from '../../browser';
-import { getWeiboCnCookies } from '../../utils/cookie';
+import { getCachedCookies } from '../../utils/cookie';
 import { config } from '../../config';
 
 //Constants
@@ -62,8 +62,8 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
     // 设置 Cookie
     try {
         if (!cachedCookies) {
-            log('正在从 Gist 获取微博 Cookie...', 'info');
-            cachedCookies = await getWeiboCnCookies();
+            log('正在获取微博 Cookie...', 'info');
+            cachedCookies = await getCachedCookies();
             log(`成功获取 ${cachedCookies.length} 个 Cookie`, 'info');
         }
         await page.context().addCookies(cachedCookies);
@@ -88,7 +88,13 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
                 });
 
                 const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
-                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+                await page.goto(url, { 
+                    waitUntil: 'networkidle',  // 等待网络请求完成
+                    timeout: 60000 
+                });
+                
+                // 额外等待页面完全渲染
+                await page.waitForTimeout(2000);
                 
                 const content = await page.textContent('body');
                 if (!content) {

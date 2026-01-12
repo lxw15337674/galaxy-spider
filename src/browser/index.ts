@@ -4,7 +4,6 @@ import playwright from 'playwright';
 class BrowserManager {
     private browser: Browser | null = null;
     private context: BrowserContext | null = null;
-    private page: Page | null = null;
 
     async getBrowser(): Promise<Browser> {
         if (!this.browser) {
@@ -16,20 +15,16 @@ class BrowserManager {
     }
 
     async createPage(): Promise<Page> {
-        if (!this.page) {
-            const browser = await this.getBrowser();
-            this.context = await browser.newContext({
-            });
-            this.page = await this.context.newPage();
-        }
-        return this.page;
+        const browser = await this.getBrowser();
+        // 每次都创建新的 context 和 page，避免并发冲突
+        this.context = await browser.newContext();
+        return await this.context.newPage();
     }
 
     async cleanup() {
         if (this.context) {
             await this.context.close();
             this.context = null;
-            this.page = null;
         }
         if (this.browser) {
             await this.browser.close();
