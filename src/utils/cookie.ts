@@ -110,6 +110,20 @@ export function convertToPlaywrightCookies(
 }
 
 /**
+ * 获取 weibo 通用 Cookie（支持多个子域名）
+ */
+export async function getWeiboCnCookies(): Promise<PlaywrightCookie[]> {
+    // 从 Gist 获取 weibo.com 的 cookie
+    const cookies = await fetchCookiesFromGist('weibo.com');
+    
+    // 同时转换为 .weibo.cn 和 .weibo.com 域名，覆盖所有子域名
+    return [
+        ...convertToPlaywrightCookies(cookies, '.weibo.cn'),
+        ...convertToPlaywrightCookies(cookies, '.weibo.com')
+    ];
+}
+
+/**
  * 获取缓存的 Cookie，如果没有则从 Gist 获取
  */
 export async function getCachedCookies(): Promise<PlaywrightCookie[]> {
