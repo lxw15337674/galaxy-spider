@@ -11,17 +11,17 @@
     "test": "vitest"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "vite-node": "^2.1.8"
+    "@types/node": "^20.19.28",
+    "typescript": "^5.9.3",
+    "vite-node": "^2.1.9"
   },
   "dependencies": {
     "@prisma/client": "6.19.1",
-    "axios": "^1.7.9",
-    "playwright": "^1.42.1",
+    "axios": "^1.13.2",
+    "playwright": "^1.57.0",
     "prisma": "6.19.1",
     "sharp": "^0.33.5",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.9"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
