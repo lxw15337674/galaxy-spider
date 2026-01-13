@@ -7,18 +7,47 @@ import { createPost } from '../../db/post';
 import type { PageResult } from './types';
 import { getProducers, getProducerById, updateProducerLastPostTime } from '../../db/producer';
 import { browserManager } from '../../browser';
+import { getCachedCookies } from '../../utils/cookie';
+import { config } from '../../config';
 
 // Constants
 const API_CONFIG = {
-    baseUrl: 'https://m.weibo.cn/api/container/getIndex',
-    headers: {
-        "accept": "application/json, text/plain, */*",
-        "mweibo-pwa": "1"
-    },
+    baseUrl: 'https://weibo.cn',
     delayMs: 5000,
     defaultMaxPages: 20,
-    postedMaxPages: 1
+    postedMaxPages: 1,
+    maxCookieRefreshPerUser: 2 // 每个用户最多刷新 Cookie 的次数
 } as const;
+
+// Cookie 缓存
+let cachedCookies: any[] | null = null;
+
+/**
+ * 检测错误是否是 Cookie 失效/登录问题
+ */
+function isLoginError(error: any): boolean {
+    const errorStr = String(error).toLowerCase();
+    const loginKeywords = [
+        '扫描二维码',
+        '扫码登录',
+        '登录',
+        'login',
+        '请登录',
+        '验证',
+        'not valid json',
+        'unexpected token'
+    ];
+    
+    return loginKeywords.some(keyword => errorStr.includes(keyword));
+}
+
+/**
+ * 清除 Cookie 缓存，强制下次重新获取
+ */
+function clearCookieCache(): void {
+    cachedCookies = null;
+    log('已清除 Cookie 缓存', 'info');
+}
     
 function hasMedia(mblog: WeiboMblog): boolean {
     // 检查是否有图片
@@ -32,49 +61,95 @@ function hasMedia(mblog: WeiboMblog): boolean {
     return hasImages || hasVideo;
 }
 
-// API functions
-const getContainerId = async (userId: string, page: Page): Promise<string|null> => {
+// 解析HTML提取微博数据
+const parseWeiboFromHtml = async (page: Page): Promise<WeiboMblog[]> => {
     try {
-        const url = `${API_CONFIG.baseUrl}?type=uid&value=${userId}`;
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-        const content = await page.textContent('body');
-        if (!content) {
-            throw new Error('页面内容为空');
+        const content = await page.content();
+        
+        // 检查是否需要登录
+        if (content.includes('请登录') || content.includes('登录')) {
+            log('页面需要登录', 'warn');
+            return [];
         }
         
-        const data = JSON.parse(content);
-        const containerId = data.data.tabsInfo.tabs[1].containerid;
-        log(`获取到用户containerId: ${containerId}`, 'info');
-        return containerId;
+        // 使用 page.evaluate 在浏览器环境中解析
+        const weibos = await page.evaluate(() => {
+            const result: any[] = [];
+            const divs = document.querySelectorAll('div.c');
+            
+            divs.forEach((div) => {
+                const idAttr = div.getAttribute('id');
+                if (!idAttr || !idAttr.startsWith('M_')) return;
+                
+                const weiboId = idAttr.substring(2);
+                
+                // 提取发布时间
+                const timeSpan = div.querySelector('span.ct');
+                const timeText = timeSpan?.textContent || '';
+                
+                // 提取内容
+                const contentSpan = div.querySelector('span.ctt');
+                const contentText = contentSpan?.textContent || '';
+                
+                // 检查是否有图片
+                const picLinks = div.querySelectorAll('a[href*="/mblog/picAll/"]');
+                const hasPics = picLinks.length > 0;
+                
+                // 检查是否有视频
+                const videoLinks = div.querySelectorAll('a[href*="video"]');
+                const hasVideo = videoLinks.length > 0;
+                
+                if (hasPics || hasVideo) {
+                    result.push({
+                        id: weiboId,
+                        created_at: timeText,
+                        text: contentText,
+                        pic_ids: hasPics ? ['pic'] : [],
+                        page_info: hasVideo ? { type: 'video' } : undefined
+                    });
+                }
+            });
+            
+            return result;
+        });
+        
+        return weibos as WeiboMblog[];
     } catch (error) {
-        log('获取用户信息失败: ' + userId + ' - ' + error, 'error');
-        return null;
+        log('解析HTML失败: ' + error, 'error');
+        return [];
     }
 };
 
-const fetchPage = async (userId: string, containerId: string, page: Page, sinceId?: string): Promise<PageResult> => {
-    const params = new URLSearchParams({
-        type: "uid",
-        value: userId,
-        containerid: containerId,
-        ...(sinceId && { since_id: sinceId })
-    });
-
-    const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+const fetchPage = async (userId: string, pageNum: number, page: Page): Promise<PageResult> => {
+    const url = `${API_CONFIG.baseUrl}/${userId}/profile?page=${pageNum}`;
+    log(`正在访问URL: ${url}`, 'info');
     
-    const content = await page.textContent('body');
-    if (!content) {
-        throw new Error('页面内容为空');
+    const response = await page.goto(url, { 
+        waitUntil: 'networkidle',  // 等待网络请求完成
+        timeout: 60000 
+    });
+    
+    if (response?.status() !== 200) {
+        throw new Error(`请求失败，状态码: ${response?.status()}`);
     }
     
-    const data = JSON.parse(content);
-
+    // 额外等待页面完全渲染
+    await page.waitForTimeout(2000);
+    
+    // 解析页面获取微博数据
+    const cards = await parseWeiboFromHtml(page);
+    
+    // 检查是否有下一页
+    const hasNextPage = await page.evaluate(() => {
+        const pageDiv = document.querySelector('div#pagelist');
+        if (!pageDiv) return false;
+        const links = Array.from(pageDiv.querySelectorAll('a'));
+        return links.some(link => link.textContent?.includes('下页'));
+    });
+    
     return {
-        cards: data.data.cards
-            .filter((card: any) => card.card_type === 9)
-            .map((card: any) => card.mblog),
-        sinceId: data.data.cardlistInfo.since_id
+        cards,
+        sinceId: hasNextPage ? String(pageNum + 1) : ''
     };
 };
 
@@ -84,6 +159,12 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             log(`帖子 ${post.id} 未包含媒体，跳过`, 'info');
             return 0;
         }
+        
+        if (!config.shouldWriteDB) {
+            log(`${config.logPrefix} 发现有媒体的帖子: ${post.id} (用户: ${post.user?.id || 'unknown'})`, 'info');
+            return 1;
+        }
+        
         const createdPost = await createPost({
             platformId: post.id,
             platform: 'WEIBO' as Platform,
@@ -105,7 +186,10 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
         return 0;
     }
 
-    const existingProducer = await getProducerById(producer.id);
+    const existingProducer = config.useTestData 
+        ? producer 
+        : await getProducerById(producer.id);
+        
     if (!existingProducer) {
         log(`Producer ${producer.id} not found in database`, 'error');
         return 0;
@@ -119,50 +203,112 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
 
     // 创建 page 实例
     const page = await browserManager.createPage();
+    
+    // 设置 Cookie
+    try {
+        if (!cachedCookies) {
+            log('正在获取微博 Cookie...', 'info');
+            cachedCookies = await getCachedCookies();
+            log(`成功获取 ${cachedCookies.length} 个 Cookie`, 'info');
+        }
+        await page.context().addCookies(cachedCookies);
+        log('Cookie 设置成功', 'info');
+    } catch (error) {
+        log(`Cookie 设置失败: ${error}`, 'error');
+        throw error;
+    }
 
     try {
-        log(`开始获取用户 ${producer.name || producer.producerId} 的containerId`, 'info');
-        const containerId = await getContainerId(producer.producerId, page);
-        if (!containerId) return 0;
-
         let processedCount = 0;
-        let sinceId: string | undefined;
+        let cookieRefreshCount = 0; // 记录该用户已刷新 Cookie 的次数
 
         log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${actualMaxPages} 页`, 'info');
-        for (let pageNum = 0; pageNum < actualMaxPages; pageNum++) {
-            try {
-                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
-                const { cards, sinceId: newSinceId } = await fetchPage(producer.producerId, containerId, page, sinceId);
-                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取成功，包含 ${cards.length} 条微博`, 'info');
-                
+        for (let pageNum = 1; pageNum <= actualMaxPages; pageNum++) {
+            let pageRetryCount = 0;
+            const maxPageRetry = 2;
+            let pageSuccess = false;
+            let currentPageCards: any[] = [];
+            let currentPageHasNext = false;
+            
+            while (pageRetryCount < maxPageRetry && !pageSuccess) {
+                try {
+                    const retryInfo = pageRetryCount > 0 ? ` (重试 ${pageRetryCount}/${maxPageRetry - 1})` : '';
+                    log(`[页面进度 ${pageNum}/${actualMaxPages}] 正在获取数据...${retryInfo}`, 'info');
+                    const { cards, sinceId: hasNextPage } = await fetchPage(producer.producerId, pageNum, page);
+                    log(`[页面进度 ${pageNum}/${actualMaxPages}] 获取成功，包含 ${cards.length} 条微博`, 'info');
+                    
+                    currentPageCards = cards;
+                    currentPageHasNext = !!hasNextPage;
+                    pageSuccess = true;
+                    
+                } catch (error) {
+                    const isLogin = isLoginError(error);
+                    
+                    if (isLogin) {
+                        log(`[页面进度 ${pageNum}/${actualMaxPages}] 检测到 Cookie 失效: ${error}`, 'error');
+                        
+                        if (cookieRefreshCount < API_CONFIG.maxCookieRefreshPerUser) {
+                            cookieRefreshCount++;
+                            log(`[页面进度 ${pageNum}/${actualMaxPages}] 尝试刷新 Cookie (${cookieRefreshCount}/${API_CONFIG.maxCookieRefreshPerUser})...`, 'info');
+                            
+                            clearCookieCache();
+                            try {
+                                cachedCookies = await getCachedCookies();
+                                await page.context().clearCookies();
+                                await page.context().addCookies(cachedCookies);
+                                log(`[页面进度 ${pageNum}/${actualMaxPages}] Cookie 刷新成功，准备重试`, 'success');
+                                await sleep(2000);
+                            } catch (cookieError) {
+                                log(`[页面进度 ${pageNum}/${actualMaxPages}] Cookie 刷新失败: ${cookieError}`, 'error');
+                                break;
+                            }
+                        } else {
+                            log(`[页面进度 ${pageNum}/${actualMaxPages}] 已达到最大 Cookie 刷新次数，跳过该页面`, 'error');
+                            break;
+                        }
+                    } else {
+                        log(`[页面进度 ${pageNum}/${actualMaxPages}] 获取失败 (非登录问题): ${error}`, 'error');
+                        if (pageRetryCount === 0) {
+                            log(`[页面进度 ${pageNum}/${actualMaxPages}] 等待 2 秒后重试...`, 'info');
+                            await sleep(2000);
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    pageRetryCount++;
+                }
+            }
+            
+            // 处理成功获取的数据
+            if (pageSuccess) {
                 let pageProcessedCount = 0;
-                for (let j = 0; j < cards.length; j++) {
-                    const card = cards[j];
+                for (let j = 0; j < currentPageCards.length; j++) {
+                    const card = currentPageCards[j];
                     const result = await processPost(card, producer);
                     processedCount += result;
                     pageProcessedCount += result;
                     if (result) {
-                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}][微博进度 ${j + 1}/${cards.length}] 成功处理微博 ${card.id}`, 'info');
+                        log(`[页面进度 ${pageNum}/${actualMaxPages}][微博进度 ${j + 1}/${currentPageCards.length}] 成功处理微博 ${card.id}`, 'info');
                     }
                 }
 
-                if (!newSinceId) {
+                if (!currentPageHasNext) {
                     log(`没有更多数据，结束获取`, 'info');
                     break;
                 }
-                sinceId = newSinceId;
-                await sleep(API_CONFIG.delayMs);
-
-            } catch (error) {
-                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取失败: ${error}`, 'error');
-                break;
+                
+                if (pageNum < actualMaxPages) {
+                    await sleep(API_CONFIG.delayMs);
+                }
+            } else {
+                log(`[页面进度 ${pageNum}/${actualMaxPages}] 该页面获取失败，继续处理下一页`, 'warn');
             }
         }
 
         log(`用户 ${producer.name || producer.producerId} 处理完成，共处理 ${processedCount} 条微博`, 'info');
         
-        // 更新lastPostTime
-        if (processedCount > 0) {
+        if (processedCount > 0 && !config.useTestData) {
             await updateProducerLastPostTime(producer.id);
             log(`已更新用户 ${producer.name || producer.producerId} 的lastPostTime`, 'info');
         }
@@ -175,8 +321,25 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
 
 export const processWeiboPerson = async (maxPages: number = API_CONFIG.defaultMaxPages): Promise<number> => {
     let totalProcessed = 0;
-    const producers = await getProducers(ProducerType.WEIBO_PERSONAL);
-    log(`开始处理微博用户，共 ${producers.length} 个账号`, 'info');
+    
+    const producers = config.useTestData 
+        ? [
+            {
+                id: 'test-user-1',
+                name: '测试用户',
+                producerId: '5286960038',
+                type: 'WEIBO_PERSONAL' as ProducerType,
+                lastPostTime: null,
+                createTime: new Date(),
+                updateTime: new Date(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                deletedAt: null
+            }
+          ]
+        : await getProducers(ProducerType.WEIBO_PERSONAL);
+    
+    log(`${config.logPrefix} 开始处理微博用户，共 ${producers.length} 个账号`, 'info');
     
     try {
         for (let i = 0; i < producers.length; i++) {
