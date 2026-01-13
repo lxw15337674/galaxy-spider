@@ -164,11 +164,14 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             log(`${config.logPrefix} 发现有媒体的帖子: ${post.id}`, 'info');
             return 1;
         }
+        console.log(post.user, producer.producerId);
+        // 使用 producer.producerId 作为 userId，因为从 HTML 解析的数据没有 user 信息
+        const userId = post.user?.id?.toString() || producer.producerId || '';
         
         const createdPost = await createPost({
             platformId: post.id,
             platform: 'WEIBO' as Platform,
-            userId: post.user.id.toString() || '',
+            userId: userId,
             producerId: producer.id,
             createTime: new Date(post.created_at)
         });
