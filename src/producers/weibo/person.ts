@@ -161,7 +161,7 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
         }
         
         if (!config.shouldWriteDB) {
-            log(`${config.logPrefix} 发现有媒体的帖子: ${post.id} (用户: ${post.user?.id || 'unknown'})`, 'info');
+            log(`${config.logPrefix} 发现有媒体的帖子: ${post.id}`, 'info');
             return 1;
         }
         
