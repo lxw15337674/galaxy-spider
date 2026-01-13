@@ -12,6 +12,8 @@ jobs:
       contents: write  # 添加写入权限以便提交
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      GIST_ID: ${{ secrets.GIST_ID }}
     
     steps:
       - name: Checkout Code
@@ -32,6 +34,12 @@ jobs:
 
       - name: Install Playwright Browsers
         run: pnpm exec playwright install chromium
+
+      - name: Install Playwright System Dependencies
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Refresh and Validate Cookies
+        run: pnpm run cookie:refresh
 
       - name: Run Producer
         run: pnpm run produce  # 需要在 package.json 中添加这个命令 
