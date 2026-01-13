@@ -16,11 +16,38 @@ const API_CONFIG = {
     },
     delayMs: 3000,
     defaultMaxPages: 20,
-    postedMaxPages: 5
+    postedMaxPages: 5,
+    maxCookieRefreshPerTopic: 2 // 每个话题最多刷新 Cookie 的次数
 } as const;
 
 // Cookie 缓存
 let cachedCookies: any[] | null = null;
+
+/**
+ * 检测错误是否是 Cookie 失效/登录问题
+ */
+function isLoginError(error: any): boolean {
+    const errorStr = String(error).toLowerCase();
+    const loginKeywords = [
+        '扫描二维码',
+        '扫码登录',
+        '登录',
+        'login',
+        '验证',
+        'not valid json',
+        'unexpected token'
+    ];
+    
+    return loginKeywords.some(keyword => errorStr.includes(keyword));
+}
+
+/**
+ * 清除 Cookie 缓存，强制下次重新获取
+ */
+function clearCookieCache(): void {
+    cachedCookies = null;
+    log('已清除 Cookie 缓存', 'info');
+}
 
 // 递归提取所有 card_type 为 9 的卡片
 function extractType9Cards(data: Card[]): Card[] {
@@ -77,68 +104,126 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
         log(`开始处理话题 ${producer.name || producer.producerId}，计划获取 ${actualMaxPages} 页`, 'info');
         let totalProcessed = 0;
         let sinceId: number | undefined;
+        let cookieRefreshCount = 0; // 记录该话题已刷新 Cookie 的次数
 
         for (let pageNum = 0; pageNum < actualMaxPages; pageNum++) {
-            try {
-                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 正在获取数据...`, 'info');
-                
-                const params = new URLSearchParams({
-                    containerid: producer.producerId,
-                    ...(sinceId && { since_id: sinceId.toString() })
-                });
+            let pageRetryCount = 0;
+            const maxPageRetry = 2; // 每个页面最多重试 2 次
+            let pageSuccess = false;
+            
+            while (pageRetryCount < maxPageRetry && !pageSuccess) {
+                try {
+                    const retryInfo = pageRetryCount > 0 ? ` (重试 ${pageRetryCount}/${maxPageRetry - 1})` : '';
+                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 正在获取数据...${retryInfo}`, 'info');
+                    
+                    const params = new URLSearchParams({
+                        containerid: producer.producerId,
+                        ...(sinceId && { since_id: sinceId.toString() })
+                    });
 
-                const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
-                await page.goto(url, { 
-                    waitUntil: 'networkidle',  // 等待网络请求完成
-                    timeout: 60000 
-                });
-                
-                // 额外等待页面完全渲染
-                await page.waitForTimeout(2000);
-                
-                const content = await page.textContent('body');
-                if (!content) {
-                    throw new Error('页面内容为空');
-                }
-                
-                const response: WeiboTopicResponse = JSON.parse(content);
-
-                if (!response.ok || !response.data.cards?.length) {
-                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
-                    break;
-                }
-
-                sinceId = response.data.pageInfo.since_id;
-                const validCards = extractType9Cards(response.data.cards);
-
-                if (!validCards.length) {
-                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 未找到有效帖子，继续下一页`, 'info');
-                    continue;
-                }
-
-                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取成功，找到 ${validCards.length} 条帖子`, 'info');
-
-                for (let i = 0; i < validCards.length; i++) {
-                    const card = validCards[i];
-                    const count = await processPost(card.mblog, producer);
-                    if (count > 0) {
-                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}][帖子进度 ${i + 1}/${validCards.length}] 成功处理帖子 ${card.mblog.id}`, 'info');
+                    const url = `${API_CONFIG.baseUrl}?${params.toString()}`;
+                    log(`正在访问URL: ${url}`, 'info');
+                    await page.goto(url, { 
+                        waitUntil: 'networkidle',
+                        timeout: 60000 
+                    });
+                    
+                    await page.waitForTimeout(2000);
+                    
+                    const content = await page.textContent('body');
+                    if (!content) {
+                        throw new Error('页面内容为空');
                     }
-                    totalProcessed += count;
-                }
+                    
+                    const response: WeiboTopicResponse = JSON.parse(content);
 
-                if (!sinceId) {
-                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
-                    break;
-                }
+                    if (!response.ok || !response.data.cards?.length) {
+                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
+                        pageSuccess = true;
+                        break;
+                    }
 
-                if (pageNum < actualMaxPages - 1) {
-                    log(`等待 ${API_CONFIG.delayMs}ms 后获取下一页...`, 'info');
-                    await sleep(API_CONFIG.delayMs);
+                    sinceId = response.data.pageInfo.since_id;
+                    const validCards = extractType9Cards(response.data.cards);
+
+                    if (!validCards.length) {
+                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 未找到有效帖子，继续下一页`, 'info');
+                        pageSuccess = true;
+                        continue;
+                    }
+
+                    log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取成功，找到 ${validCards.length} 条帖子`, 'info');
+
+                    for (let i = 0; i < validCards.length; i++) {
+                        const card = validCards[i];
+                        const count = await processPost(card.mblog, producer);
+                        if (count > 0) {
+                            log(`[页面进度 ${pageNum + 1}/${actualMaxPages}][帖子进度 ${i + 1}/${validCards.length}] 成功处理帖子 ${card.mblog.id}`, 'info');
+                        }
+                        totalProcessed += count;
+                    }
+
+                    if (!sinceId) {
+                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 没有更多数据，结束获取`, 'info');
+                    }
+                    
+                    pageSuccess = true;
+
+                } catch (error) {
+                    const isLogin = isLoginError(error);
+                    
+                    if (isLogin) {
+                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 检测到 Cookie 失效: ${error}`, 'error');
+                        
+                        // 检查是否还能刷新 Cookie
+                        if (cookieRefreshCount < API_CONFIG.maxCookieRefreshPerTopic) {
+                            cookieRefreshCount++;
+                            log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 尝试刷新 Cookie (${cookieRefreshCount}/${API_CONFIG.maxCookieRefreshPerTopic})...`, 'info');
+                            
+                            // 清除缓存并重新获取 Cookie
+                            clearCookieCache();
+                            try {
+                                cachedCookies = await getCachedCookies();
+                                await page.context().clearCookies();
+                                await page.context().addCookies(cachedCookies);
+                                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] Cookie 刷新成功，准备重试`, 'success');
+                                await sleep(2000); // 等待 2 秒后重试
+                            } catch (cookieError) {
+                                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] Cookie 刷新失败: ${cookieError}`, 'error');
+                                break; // Cookie 刷新失败，跳过该页面
+                            }
+                        } else {
+                            log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 已达到最大 Cookie 刷新次数，跳过该页面`, 'error');
+                            break;
+                        }
+                    } else {
+                        log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取失败 (非登录问题): ${error}`, 'error');
+                        // 非登录问题，简单重试一次
+                        if (pageRetryCount === 0) {
+                            log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 等待 2 秒后重试...`, 'info');
+                            await sleep(2000);
+                        } else {
+                            break; // 重试失败，跳过该页面
+                        }
+                    }
+                    
+                    pageRetryCount++;
                 }
-            } catch (error) {
-                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取失败: ${error}`, 'error');
+            }
+            
+            // 如果页面获取失败，继续下一页而不是终止整个话题
+            if (!pageSuccess && pageRetryCount >= maxPageRetry) {
+                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 该页面获取失败，继续处理下一页`, 'warn');
+            }
+            
+            // 如果成功获取且没有更多数据，则退出循环
+            if (pageSuccess && !sinceId) {
                 break;
+            }
+            
+            if (pageNum < actualMaxPages - 1) {
+                log(`等待 ${API_CONFIG.delayMs}ms 后获取下一页...`, 'info');
+                await sleep(API_CONFIG.delayMs);
             }
         }
 
@@ -162,10 +247,13 @@ export const processWeiboTopic = async (maxPages: number = API_CONFIG.defaultMax
                 id: 'test-topic-1',
                 name: '八三夭超话',
                 producerId: '100808dfa9a8980d720caae9bacf4af9da90fc',
-                type: 'WEIBO_SUPER_TOPIC' as any,
+                type: 'WEIBO_SUPER_TOPIC' as ProducerType,
                 lastPostTime: null,
+                createTime: new Date(),
+                updateTime: new Date(),
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                deletedAt: null
             }
           ]
         : await getProducers(ProducerType.WEIBO_SUPER_TOPIC);
