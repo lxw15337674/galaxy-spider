@@ -23,6 +23,71 @@ const API_CONFIG = {
 let cachedCookies: any[] | null = null;
 
 /**
+ * 解析微博时间文本（中文格式）
+ * 例如："今天 14:30"、"1小时前"、"01月12日 22:30"、"2023-12-25 10:00:00"、"2025-12-31 18:42:16 来自邱笛尔超话"
+ */
+function parseWeiboTime(timeText: string): Date {
+    try {
+        const now = new Date();
+        
+        // 移除多余空格
+        timeText = timeText.trim();
+        
+        // 移除 "来自xxx" 后缀（微博来源信息）
+        timeText = timeText.replace(/\s+来自.+$/, '');
+        
+        // 格式1: "X分钟前"
+        const minutesMatch = timeText.match(/(\d+)分钟前/);
+        if (minutesMatch) {
+            const minutes = parseInt(minutesMatch[1]);
+            return new Date(now.getTime() - minutes * 60 * 1000);
+        }
+        
+        // 格式2: "X小时前"
+        const hoursMatch = timeText.match(/(\d+)小时前/);
+        if (hoursMatch) {
+            const hours = parseInt(hoursMatch[1]);
+            return new Date(now.getTime() - hours * 60 * 60 * 1000);
+        }
+        
+        // 格式3: "今天 HH:MM"
+        const todayMatch = timeText.match(/今天\s+(\d{1,2}):(\d{2})/);
+        if (todayMatch) {
+            const hour = parseInt(todayMatch[1]);
+            const minute = parseInt(todayMatch[2]);
+            const date = new Date(now);
+            date.setHours(hour, minute, 0, 0);
+            return date;
+        }
+        
+        // 格式4: "MM月DD日 HH:MM" (今年)
+        const thisYearMatch = timeText.match(/(\d{1,2})月(\d{1,2})日\s+(\d{1,2}):(\d{2})/);
+        if (thisYearMatch) {
+            const month = parseInt(thisYearMatch[1]) - 1; // 月份从0开始
+            const day = parseInt(thisYearMatch[2]);
+            const hour = parseInt(thisYearMatch[3]);
+            const minute = parseInt(thisYearMatch[4]);
+            const date = new Date(now.getFullYear(), month, day, hour, minute, 0, 0);
+            return date;
+        }
+        
+        // 格式5: 标准日期格式 "YYYY-MM-DD HH:MM:SS"
+        const standardDate = new Date(timeText);
+        if (!isNaN(standardDate.getTime())) {
+            return standardDate;
+        }
+        
+        // 无法解析，返回当前时间
+        log(`无法解析时间文本: "${timeText}"，使用当前时间`, 'warn');
+        return now;
+        
+    } catch (error) {
+        log(`解析时间失败: ${error}，使用当前时间`, 'error');
+        return new Date();
+    }
+}
+
+/**
  * 检测错误是否是 Cookie 失效/登录问题
  */
 function isLoginError(error: any): boolean {
@@ -164,16 +229,19 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
             log(`${config.logPrefix} 发现有媒体的帖子: ${post.id}`, 'info');
             return 1;
         }
-        console.log(post.user, producer.producerId);
+        
         // 使用 producer.producerId 作为 userId，因为从 HTML 解析的数据没有 user 信息
         const userId = post.user?.id?.toString() || producer.producerId || '';
+        
+        // 解析微博时间
+        const createTime = parseWeiboTime(post.created_at);
         
         const createdPost = await createPost({
             platformId: post.id,
             platform: 'WEIBO' as Platform,
             userId: userId,
             producerId: producer.id,
-            createTime: new Date(post.created_at)
+            createTime: createTime
         });
         log(`创建帖子成功: ${post.id}`, 'info');
         return createdPost ? 1 : 0;
