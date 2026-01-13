@@ -17,15 +17,17 @@ async function main() {
                 log(`微博用户处理完成`, 'success');
             });
         } else {
-            log('📌 开始并发处理微博话题和用户...', 'info');
-            await Promise.all([
-                processWeiboTopic().then(() => {
-                    log(`微博话题处理完成`, 'success');
-                }),
-                processWeiboPerson().then(() => {
-                    log(`微博用户处理完成`, 'success');
-                })
-            ]);
+            log('📌 开始串行处理微博用户和话题...', 'info');
+            
+            // 先处理微博用户
+            await processWeiboPerson().then(() => {
+                log(`微博用户处理完成`, 'success');
+            });
+            
+            // 再处理微博话题
+            await processWeiboTopic().then(() => {
+                log(`微博话题处理完成`, 'success');
+            });
         }
         
         const processEndTime = Date.now();
