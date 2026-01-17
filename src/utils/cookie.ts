@@ -302,8 +302,8 @@ export async function refreshAndValidateCookies(): Promise<boolean> {
         
         if (isRedirectedToLogin) {
             console.log('❌ Cookie 已失效，无法刷新');
-            await browser.close();
-            return false;
+            // await browser.close();
+            // return false;
         }
         
         console.log('✅ Cookie 有效');
