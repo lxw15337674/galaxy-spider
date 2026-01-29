@@ -5,7 +5,7 @@ import { getProducers, updateProducerLastPostTime } from '../../db/producer';
 import { processPost } from './person';
 import type { Card, WeiboTopicResponse } from './types';
 import { browserManager } from '../../browser';
-import { getCachedCookies } from '../../utils/cookie';
+import { getCachedCookies, clearCookieCache as clearGlobalCookieCache } from '../../utils/cookie';
 import { config } from '../../config';
 
 //Constants
@@ -46,6 +46,7 @@ function isLoginError(error: any): boolean {
  */
 function clearCookieCache(): void {
     cachedCookies = null;
+    clearGlobalCookieCache();
     log('已清除 Cookie 缓存', 'info');
 }
 

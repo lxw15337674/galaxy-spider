@@ -7,7 +7,7 @@ import { createPost } from '../../db/post';
 import type { PageResult } from './types';
 import { getProducers, getProducerById, updateProducerLastPostTime } from '../../db/producer';
 import { browserManager } from '../../browser';
-import { getCachedCookies } from '../../utils/cookie';
+import { getCachedCookies, clearCookieCache as clearGlobalCookieCache } from '../../utils/cookie';
 import { config } from '../../config';
 
 // Constants
@@ -77,13 +77,13 @@ function parseWeiboTime(timeText: string): Date {
             return standardDate;
         }
         
-        // 无法解析，返回当前时间
-        log(`无法解析时间文本: "${timeText}"，使用当前时间`, 'warn');
-        return now;
+        // 无法解析，返回固定时间避免误更新
+        log(`无法解析时间文本: "${timeText}"，使用时间 1970-01-01`, 'warn');
+        return new Date(0);
         
     } catch (error) {
-        log(`解析时间失败: ${error}，使用当前时间`, 'error');
-        return new Date();
+        log(`解析时间失败: ${error}，使用时间 1970-01-01`, 'error');
+        return new Date(0);
     }
 }
 
@@ -111,6 +111,7 @@ function isLoginError(error: any): boolean {
  */
 function clearCookieCache(): void {
     cachedCookies = null;
+    clearGlobalCookieCache();
     log('已清除 Cookie 缓存', 'info');
 }
     
@@ -131,10 +132,9 @@ const parseWeiboFromHtml = async (page: Page): Promise<WeiboMblog[]> => {
     try {
         const content = await page.content();
         
-        // 检查是否需要登录
-        if (content.includes('请登录') || content.includes('登录')) {
-            log('页面需要登录', 'warn');
-            return [];
+        // 检查是否需要登录（避免误判正文里的“登录”）
+        if (content.includes('passport.weibo') || content.includes('name="password"')) {
+            throw new Error('需要登录');
         }
         
         // 使用 page.evaluate 在浏览器环境中解析
@@ -180,6 +180,9 @@ const parseWeiboFromHtml = async (page: Page): Promise<WeiboMblog[]> => {
         
         return weibos as WeiboMblog[];
     } catch (error) {
+        if (String(error).includes('登录') || String(error).toLowerCase().includes('login')) {
+            throw error;
+        }
         log('解析HTML失败: ' + error, 'error');
         return [];
     }
@@ -196,6 +199,11 @@ const fetchPage = async (userId: string, pageNum: number, page: Page): Promise<P
     
     if (response?.status() !== 200) {
         throw new Error(`请求失败，状态码: ${response?.status()}`);
+    }
+
+    const finalUrl = page.url();
+    if (finalUrl.includes('login') || finalUrl.includes('passport') || finalUrl.includes('signin')) {
+        throw new Error('需要登录');
     }
     
     // 额外等待页面完全渲染
