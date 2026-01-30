@@ -1,5 +1,6 @@
 import { Browser, BrowserContext, Page } from 'playwright';
 import playwright from 'playwright';
+import { resolveStorageStatePath } from '../utils/storageState';
 
 class BrowserManager {
     private browser: Browser | null = null;
@@ -20,7 +21,14 @@ class BrowserManager {
         if (this.context) {
             await this.context.close();
         }
-        this.context = await browser.newContext();
+        const resolvedStorageStatePath = await resolveStorageStatePath();
+        const contextOptions = resolvedStorageStatePath
+            ? { storageState: resolvedStorageStatePath }
+            : {};
+        this.context = await browser.newContext(contextOptions);
+        if (!resolvedStorageStatePath) {
+            console.log('⚠️ 未找到 storageState，可能会触发登录要求');
+        }
         return await this.context.newPage();
     }
 

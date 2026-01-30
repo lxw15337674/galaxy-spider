@@ -7,20 +7,15 @@ import { createPost } from '../../db/post';
 import type { PageResult } from './types';
 import { getProducers, getProducerById, updateProducerLastPostTime } from '../../db/producer';
 import { browserManager } from '../../browser';
-import { getCachedCookies, clearCookieCache as clearGlobalCookieCache } from '../../utils/cookie';
 import { config } from '../../config';
 
 // Constants
 const API_CONFIG = {
-    baseUrl: 'https://weibo.cn',
-    delayMs: 5000,
-    defaultMaxPages: 20,
-    postedMaxPages: 1,
-    maxCookieRefreshPerUser: 2 // 每个用户最多刷新 Cookie 的次数
+    baseUrl: 'https://weibo.com/ajax/statuses/mymblog',
+    delayMs: 3000,
+    defaultMaxPages: 5,
+    postedMaxPages: 5
 } as const;
-
-// Cookie 缓存
-let cachedCookies: any[] | null = null;
 
 /**
  * 解析微博时间文本（中文格式）
@@ -106,15 +101,6 @@ function isLoginError(error: any): boolean {
     return loginKeywords.some(keyword => errorStr.includes(keyword));
 }
 
-/**
- * 清除 Cookie 缓存，强制下次重新获取
- */
-function clearCookieCache(): void {
-    cachedCookies = null;
-    clearGlobalCookieCache();
-    log('已清除 Cookie 缓存', 'info');
-}
-    
 function hasMedia(mblog: WeiboMblog): boolean {
     // 检查是否有图片
     const hasImages = (mblog.pic_ids?.length > 0) || (mblog.pics && mblog.pics.length > 0);
@@ -127,99 +113,50 @@ function hasMedia(mblog: WeiboMblog): boolean {
     return hasImages || hasVideo;
 }
 
-// 解析HTML提取微博数据
-const parseWeiboFromHtml = async (page: Page): Promise<WeiboMblog[]> => {
-    try {
-        const content = await page.content();
-        
-        // 检查是否需要登录（避免误判正文里的“登录”）
-        if (content.includes('passport.weibo') || content.includes('name="password"')) {
-            throw new Error('需要登录');
-        }
-        
-        // 使用 page.evaluate 在浏览器环境中解析
-        const weibos = await page.evaluate(() => {
-            const result: any[] = [];
-            const divs = document.querySelectorAll('div.c');
-            
-            divs.forEach((div) => {
-                const idAttr = div.getAttribute('id');
-                if (!idAttr || !idAttr.startsWith('M_')) return;
-                
-                const weiboId = idAttr.substring(2);
-                
-                // 提取发布时间
-                const timeSpan = div.querySelector('span.ct');
-                const timeText = timeSpan?.textContent || '';
-                
-                // 提取内容
-                const contentSpan = div.querySelector('span.ctt');
-                const contentText = contentSpan?.textContent || '';
-                
-                // 检查是否有图片
-                const picLinks = div.querySelectorAll('a[href*="/mblog/picAll/"]');
-                const hasPics = picLinks.length > 0;
-                
-                // 检查是否有视频
-                const videoLinks = div.querySelectorAll('a[href*="video"]');
-                const hasVideo = videoLinks.length > 0;
-                
-                if (hasPics || hasVideo) {
-                    result.push({
-                        id: weiboId,
-                        created_at: timeText,
-                        text: contentText,
-                        pic_ids: hasPics ? ['pic'] : [],
-                        page_info: hasVideo ? { type: 'video' } : undefined
-                    });
-                }
-            });
-            
-            return result;
-        });
-        
-        return weibos as WeiboMblog[];
-    } catch (error) {
-        if (String(error).includes('登录') || String(error).toLowerCase().includes('login')) {
-            throw error;
-        }
-        log('解析HTML失败: ' + error, 'error');
-        return [];
-    }
+function getRequestHeaders(userId: string) {
+    return {
+        accept: 'application/json, text/plain, */*',
+        referer: `https://weibo.com/u/${userId}`,
+        'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    };
+}
+
+type WeiboMymblogResponse = {
+    ok: number;
+    data?: {
+        list?: WeiboMblog[];
+        total?: number;
+    };
+    error?: string;
 };
 
 const fetchPage = async (userId: string, pageNum: number, page: Page): Promise<PageResult> => {
-    const url = `${API_CONFIG.baseUrl}/${userId}/profile?page=${pageNum}`;
+    const url = `${API_CONFIG.baseUrl}?uid=${userId}&page=${pageNum}&feature=0`;
     log(`正在访问URL: ${url}`, 'info');
-    
-    const response = await page.goto(url, { 
-        waitUntil: 'networkidle',  // 等待网络请求完成
-        timeout: 60000 
+
+    const response = await page.request.get(url, {
+        headers: getRequestHeaders(userId)
     });
-    
-    if (response?.status() !== 200) {
-        throw new Error(`请求失败，状态码: ${response?.status()}`);
+
+    if (response.status() !== 200) {
+        if (response.status() === 403) {
+            throw new Error('需要登录');
+        }
+        throw new Error(`请求失败，状态码: ${response.status()}`);
     }
 
-    const finalUrl = page.url();
-    if (finalUrl.includes('login') || finalUrl.includes('passport') || finalUrl.includes('signin')) {
-        throw new Error('需要登录');
+    const json = (await response.json()) as WeiboMymblogResponse;
+    if (json.ok !== 1 || !json.data?.list) {
+        throw new Error(json.error || '需要登录');
     }
-    
-    // 额外等待页面完全渲染
-    await page.waitForTimeout(2000);
-    
-    // 解析页面获取微博数据
-    const cards = await parseWeiboFromHtml(page);
-    
-    // 检查是否有下一页
-    const hasNextPage = await page.evaluate(() => {
-        const pageDiv = document.querySelector('div#pagelist');
-        if (!pageDiv) return false;
-        const links = Array.from(pageDiv.querySelectorAll('a'));
-        return links.some(link => link.textContent?.includes('下页'));
-    });
-    
+
+    const cards = json.data.list.map(item => ({
+        ...item,
+        pic_ids: item.pic_ids || [],
+    })) as WeiboMblog[];
+
+    const hasNextPage = cards.length > 0;
     return {
         cards,
         sinceId: hasNextPage ? String(pageNum + 1) : ''
@@ -283,23 +220,8 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
     // 创建 page 实例
     const page = await browserManager.createPage();
     
-    // 设置 Cookie
-    try {
-        if (!cachedCookies) {
-            log('正在获取微博 Cookie...', 'info');
-            cachedCookies = await getCachedCookies();
-            log(`成功获取 ${cachedCookies.length} 个 Cookie`, 'info');
-        }
-        await page.context().addCookies(cachedCookies);
-        log('Cookie 设置成功', 'info');
-    } catch (error) {
-        log(`Cookie 设置失败: ${error}`, 'error');
-        throw error;
-    }
-
     try {
         let processedCount = 0;
-        let cookieRefreshCount = 0; // 记录该用户已刷新 Cookie 的次数
 
         log(`开始获取用户 ${producer.name || producer.producerId} 的微博列表，计划获取 ${actualMaxPages} 页`, 'info');
         for (let pageNum = 1; pageNum <= actualMaxPages; pageNum++) {
@@ -325,26 +247,7 @@ export const processUserPost = async (producer: Producer, maxPages: number): Pro
                     
                     if (isLogin) {
                         log(`[页面进度 ${pageNum}/${actualMaxPages}] 检测到 Cookie 失效: ${error}`, 'error');
-                        
-                        if (cookieRefreshCount < API_CONFIG.maxCookieRefreshPerUser) {
-                            cookieRefreshCount++;
-                            log(`[页面进度 ${pageNum}/${actualMaxPages}] 尝试刷新 Cookie (${cookieRefreshCount}/${API_CONFIG.maxCookieRefreshPerUser})...`, 'info');
-                            
-                            clearCookieCache();
-                            try {
-                                cachedCookies = await getCachedCookies();
-                                await page.context().clearCookies();
-                                await page.context().addCookies(cachedCookies);
-                                log(`[页面进度 ${pageNum}/${actualMaxPages}] Cookie 刷新成功，准备重试`, 'success');
-                                await sleep(2000);
-                            } catch (cookieError) {
-                                log(`[页面进度 ${pageNum}/${actualMaxPages}] Cookie 刷新失败: ${cookieError}`, 'error');
-                                break;
-                            }
-                        } else {
-                            log(`[页面进度 ${pageNum}/${actualMaxPages}] 已达到最大 Cookie 刷新次数，跳过该页面`, 'error');
-                            break;
-                        }
+                        break;
                     } else {
                         log(`[页面进度 ${pageNum}/${actualMaxPages}] 获取失败 (非登录问题): ${error}`, 'error');
                         if (pageRetryCount === 0) {

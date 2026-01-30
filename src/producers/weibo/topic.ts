@@ -5,7 +5,6 @@ import { getProducers, updateProducerLastPostTime } from '../../db/producer';
 import { processPost } from './person';
 import type { Card, WeiboTopicResponse } from './types';
 import { browserManager } from '../../browser';
-import { getCachedCookies, clearCookieCache as clearGlobalCookieCache } from '../../utils/cookie';
 import { config } from '../../config';
 
 //Constants
@@ -16,12 +15,8 @@ const API_CONFIG = {
     },
     delayMs: 3000,
     defaultMaxPages: 20,
-    postedMaxPages: 5,
-    maxCookieRefreshPerTopic: 2 // 每个话题最多刷新 Cookie 的次数
+    postedMaxPages: 5
 } as const;
-
-// Cookie 缓存
-let cachedCookies: any[] | null = null;
 
 /**
  * 检测错误是否是 Cookie 失效/登录问题
@@ -39,15 +34,6 @@ function isLoginError(error: any): boolean {
     ];
     
     return loginKeywords.some(keyword => errorStr.includes(keyword));
-}
-
-/**
- * 清除 Cookie 缓存，强制下次重新获取
- */
-function clearCookieCache(): void {
-    cachedCookies = null;
-    clearGlobalCookieCache();
-    log('已清除 Cookie 缓存', 'info');
 }
 
 // 递归提取所有 card_type 为 9 的卡片
@@ -87,25 +73,10 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
     // 创建 page 实例
     const page = await browserManager.createPage();
     
-    // 设置 Cookie
-    try {
-        if (!cachedCookies) {
-            log('正在获取微博 Cookie...', 'info');
-            cachedCookies = await getCachedCookies();
-            log(`成功获取 ${cachedCookies.length} 个 Cookie`, 'info');
-        }
-        await page.context().addCookies(cachedCookies);
-        log('Cookie 设置成功', 'info');
-    } catch (error) {
-        log(`Cookie 设置失败: ${error}`, 'error');
-        throw error;
-    }
-
     try {
         log(`开始处理话题 ${producer.name || producer.producerId}，计划获取 ${actualMaxPages} 页`, 'info');
         let totalProcessed = 0;
         let sinceId: number | undefined;
-        let cookieRefreshCount = 0; // 记录该话题已刷新 Cookie 的次数
 
         for (let pageNum = 0; pageNum < actualMaxPages; pageNum++) {
             let pageRetryCount = 0;
@@ -175,28 +146,7 @@ export const processTopicPost = async (producer: Producer, maxPages: number): Pr
                     
                     if (isLogin) {
                         log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 检测到 Cookie 失效: ${error}`, 'error');
-                        
-                        // 检查是否还能刷新 Cookie
-                        if (cookieRefreshCount < API_CONFIG.maxCookieRefreshPerTopic) {
-                            cookieRefreshCount++;
-                            log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 尝试刷新 Cookie (${cookieRefreshCount}/${API_CONFIG.maxCookieRefreshPerTopic})...`, 'info');
-                            
-                            // 清除缓存并重新获取 Cookie
-                            clearCookieCache();
-                            try {
-                                cachedCookies = await getCachedCookies();
-                                await page.context().clearCookies();
-                                await page.context().addCookies(cachedCookies);
-                                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] Cookie 刷新成功，准备重试`, 'success');
-                                await sleep(2000); // 等待 2 秒后重试
-                            } catch (cookieError) {
-                                log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] Cookie 刷新失败: ${cookieError}`, 'error');
-                                break; // Cookie 刷新失败，跳过该页面
-                            }
-                        } else {
-                            log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 已达到最大 Cookie 刷新次数，跳过该页面`, 'error');
-                            break;
-                        }
+                        break;
                     } else {
                         log(`[页面进度 ${pageNum + 1}/${actualMaxPages}] 获取失败 (非登录问题): ${error}`, 'error');
                         // 非登录问题，简单重试一次
