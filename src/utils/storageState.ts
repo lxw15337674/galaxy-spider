@@ -47,8 +47,8 @@ async function fetchGistStorageState(): Promise<string | undefined> {
     return file.content as string | undefined;
 }
 
-export async function resolveStorageStatePath(): Promise<string | undefined> {
-    const envPath = process.env.STORAGE_STATE_PATH || DEFAULT_STORAGE_STATE_PATH;
+export async function resolveStorageStatePath(storageStatePath?: string): Promise<string | undefined> {
+    const envPath = storageStatePath || process.env.STORAGE_STATE_PATH || DEFAULT_STORAGE_STATE_PATH;
     const resolvedPath = path.resolve(envPath);
 
     if (fs.existsSync(resolvedPath)) {
