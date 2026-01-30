@@ -81,7 +81,7 @@ export interface WeiboMblog {
         list_id: number;
     };
     created_at: string;
-    id: string;
+    id: string | number;
     mid: string;
     can_edit: boolean;
     text: string;

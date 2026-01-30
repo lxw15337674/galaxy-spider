@@ -182,7 +182,7 @@ export const processPost = async (post: WeiboMblog, producer: Producer): Promise
         const createTime = parseWeiboTime(post.created_at);
         
         const createdPost = await createPost({
-            platformId: post.id,
+            platformId: String(post.id),
             platform: 'WEIBO' as Platform,
             userId: userId,
             producerId: producer.id,

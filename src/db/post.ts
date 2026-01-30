@@ -4,14 +4,15 @@ import { prisma } from '.';
 export const createPost = async (data: {
     platform: Platform;
     userId: string;
-    platformId: string;
+    platformId: string | number;
     producerId: string;
     createTime: Date;
 }): Promise<Post> => {
+    const platformId = String(data.platformId);
     const postData = {
         userId: data.userId,
         platform: data.platform,
-        platformId: data.platformId,
+        platformId,
         producerId: data.producerId,
         status: UploadStatus.PENDING,
         createTime: data.createTime
@@ -20,7 +21,7 @@ export const createPost = async (data: {
         where: {
             platform_platformId: {
                 platform: data.platform,
-                platformId: data.platformId
+                platformId
             }
         },
         update: {
