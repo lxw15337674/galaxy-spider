@@ -8,7 +8,6 @@
     "produce": "vite-node ./src/produce.ts",
     "produce:test": "cross-env RUN_MODE=test vite-node ./src/produce.ts",
     "produce:dev": "cross-env RUN_MODE=dev vite-node ./src/produce.ts",
-    "cookie:refresh": "vite-node ./src/scripts/refreshCookie.ts",
     "storage:refresh": "vite-node ./src/scripts/refreshStorageState.ts",
     "dev": "vite-node src/index.ts",
     "start": "vite-node src/index.ts",
