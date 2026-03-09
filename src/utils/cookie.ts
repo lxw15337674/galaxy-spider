@@ -1,14 +1,15 @@
 /**
  * Cookie 管理工具
- * 从 GitHub Gist 获取和管理 Cookie
+ * 支持从 GitHub Gist 获取或使用硬编码的 Cookie
  */
+
+import { config } from '../config';
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GIST_ID = process.env.GIST_ID;
 
-if (!GITHUB_TOKEN || !GIST_ID) {
-    throw new Error('缺少必要的环境变量: GITHUB_TOKEN 和 GIST_ID 必须在 .env 文件中配置');
-}
+// 硬编码的微博 Cookie（备用方案）
+const HARDCODED_WEIBO_COOKIE = 'WEIBOCN_FROM=1110006030; SUB=_2AkMe1h3tf8NxqwFRmvsXxG7ia4h2wwrEieKoiuw2JRM3HRl-yT9kqnc9tRB6NVYzAmxCM1izZSWe9-xcPQmmL_NGEnIl; SUBP=0033WrSXqPxfM72-Ws9jqgMF55529P9D9WhR9EPgz3BDPWy-YHwFuiIb; MLOGIN=0; _T_WM=38152265571; XSRF-TOKEN=86baeb; M_WEIBOCN_PARAMS=luicode%3D10000011%26lfid%3D102803%26launchid%3D10000360-page_H5%26fid%3D106003type%253D25%2526t%253D3%2526disable_hot%253D1%2526filter_type%253Drealtimehot%26uicode%3D10000011';
 
 // 全局 Cookie 缓存
 let cookieCache: PlaywrightCookie[] | null = null;
@@ -111,28 +112,64 @@ export function convertToPlaywrightCookies(
 
 /**
  * 获取 weibo 通用 Cookie（支持多个子域名）
+ * 优先使用硬编码的 Cookie，如果配置了 Gist 且未强制使用硬编码则从 Gist 获取
  */
 export async function getWeiboCnCookies(): Promise<PlaywrightCookie[]> {
-    // 从 Gist 获取 weibo.com 的 cookie
-    const cookies = await fetchCookiesFromGist('weibo.com');
+    // 如果配置强制使用硬编码 Cookie
+    if (config.useHardcodedCookie) {
+        return getHardcodedWeiboCookies();
+    }
     
-    // 同时转换为 .weibo.cn 和 .weibo.com 域名，覆盖所有子域名
-    return [
-        ...convertToPlaywrightCookies(cookies, '.weibo.cn'),
-        ...convertToPlaywrightCookies(cookies, '.weibo.com')
-    ];
+    // 检查是否配置了 Gist
+    const useGist = GITHUB_TOKEN && GIST_ID;
+    
+    if (useGist) {
+        try {
+            // 从 Gist 获取 weibo.com 的 cookie
+            const cookies = await fetchCookiesFromGist('weibo.com');
+            
+            // 同时转换为 .weibo.cn 和 .weibo.com 域名，覆盖所有子域名
+            return [
+                ...convertToPlaywrightCookies(cookies, '.weibo.cn'),
+                ...convertToPlaywrightCookies(cookies, '.weibo.com')
+            ];
+        } catch (error) {
+            console.warn('⚠️ 从 Gist 获取 Cookie 失败，使用硬编码的 Cookie', error);
+            return getHardcodedWeiboCookies();
+        }
+    } else {
+        // 使用硬编码的 Cookie
+        return getHardcodedWeiboCookies();
+    }
 }
 
 /**
- * 获取缓存的 Cookie，如果没有则从 Gist 获取
+ * 获取缓存的 Cookie，如果没有则从 Gist 或硬编码获取
  */
 export async function getCachedCookies(): Promise<PlaywrightCookie[]> {
     if (!cookieCache) {
-        console.log('📥 从 Gist 获取 Cookie...');
+        console.log('📥 获取 Cookie...');
         cookieCache = await getWeiboCnCookies();
         console.log(`✅ 成功获取 ${cookieCache.length} 个 Cookie`);
     }
     return cookieCache;
+}
+
+/**
+ * 获取 Cookie 字符串（用于 API 请求）
+ */
+export async function getWeiboCookieString(): Promise<string> {
+    const cookies = await getCachedCookies();
+    // 只使用 .weibo.cn 的 Cookie（避免重复）
+    const weiboCnCookies = cookies.filter(c => c.domain === '.weibo.cn');
+    return weiboCnCookies.map(c => `${c.name}=${c.value}`).join('; ');
+}
+
+/**
+ * 获取硬编码的 Cookie 字符串
+ */
+export function getHardcodedCookieString(): string {
+    return HARDCODED_WEIBO_COOKIE;
 }
 
 /**
@@ -148,6 +185,39 @@ export function clearCookieCache(): void {
  */
 export function cookiesToString(cookies: CookieItem[]): string {
     return cookies.map(c => `${c.name}=${c.value}`).join('; ');
+}
+
+/**
+ * 解析 Cookie 字符串为 CookieItem 数组
+ */
+export function parseCookieString(cookieString: string): CookieItem[] {
+    return cookieString.split(';').map(item => {
+        const [name, value] = item.trim().split('=');
+        return {
+            name: name.trim(),
+            value: value?.trim() || '',
+            domain: '.weibo.cn',
+            path: '/',
+            expires: -1,
+            httpOnly: false,
+            secure: false,
+            sameSite: 'Lax'
+        };
+    }).filter(c => c.name); // 过滤空名称
+}
+
+/**
+ * 获取硬编码的微博 Cookie
+ */
+export function getHardcodedWeiboCookies(): PlaywrightCookie[] {
+    console.log('📝 使用硬编码的微博 Cookie');
+    const cookies = parseCookieString(HARDCODED_WEIBO_COOKIE);
+    
+    // 同时转换为 .weibo.cn 和 .weibo.com 域名，覆盖所有子域名
+    return [
+        ...convertToPlaywrightCookies(cookies, '.weibo.cn'),
+        ...convertToPlaywrightCookies(cookies, '.weibo.com')
+    ];
 }
 
 /**
